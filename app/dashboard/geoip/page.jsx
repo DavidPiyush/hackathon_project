@@ -26,6 +26,9 @@ export default function GeoIpPage() {
 
   const sorted = [...geoOrigins].sort((a, b) => b.risk - a.risk);
 
+  // Hoisted out of the table loop, where it was recomputed per row.
+  const peakVolume = Math.max(...geoOrigins.map((origin) => origin.volume));
+
   return (
     <>
       <PageHeader
@@ -154,7 +157,7 @@ export default function GeoIpPage() {
           */}
           <div className="mt-6 overflow-x-auto">
             <div className="relative min-w-[40rem]">
-              <div className="relative aspect-[2/1] w-full overflow-hidden rounded-xl border border-line bg-abyss">
+              <div className="relative aspect-[2/1] w-full overflow-hidden rounded-xl border border-line bg-sunken">
                 {/* Graticule */}
                 <div
                   aria-hidden="true"
@@ -232,7 +235,7 @@ export default function GeoIpPage() {
                 Observed sending origins with network, volume and risk
               </caption>
 
-              <thead className="border-b border-line bg-white/[0.015]">
+              <thead className="border-b border-line bg-raise">
                 <tr>
                   {[
                     "Origin",
@@ -283,7 +286,7 @@ export default function GeoIpPage() {
                       <div className="flex items-center gap-2.5">
                         <Meter
                           value={origin.volume}
-                          max={Math.max(...geoOrigins.map((o) => o.volume))}
+                          max={peakVolume}
                           tone="info"
                           size="sm"
                           label={`${origin.volume} messages from ${origin.ip}`}
@@ -351,7 +354,7 @@ export default function GeoIpPage() {
             ].map((item) => (
               <li
                 key={item.step}
-                className="rounded-lg border border-line bg-white/[0.02] p-4"
+                className="rounded-lg border border-line bg-raise p-4"
               >
                 <span className="font-mono text-lg font-bold text-accent/40">
                   {item.step}

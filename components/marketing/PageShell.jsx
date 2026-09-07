@@ -131,9 +131,9 @@ export function Prose({ children, className }) {
         "[&_strong]:font-semibold [&_strong]:text-ink",
         "[&_em]:not-italic [&_em]:text-accent",
         "[&_a]:font-medium [&_a]:text-accent [&_a]:underline [&_a]:decoration-accent/40 [&_a]:underline-offset-2 [&_a:hover]:decoration-accent",
-        "[&_code]:rounded [&_code]:border [&_code]:border-line [&_code]:bg-white/5 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.8em] [&_code]:text-ink",
+        "[&_code]:rounded [&_code]:border [&_code]:border-line [&_code]:bg-raise-md [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.8em] [&_code]:text-ink",
         // Preformatted blocks scroll rather than widening the page
-        "[&_pre]:mt-4 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-line [&_pre]:bg-abyss [&_pre]:p-4",
+        "[&_pre]:mt-4 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-line [&_pre]:bg-sunken [&_pre]:p-4",
         "[&_pre_code]:border-0 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[11px] [&_pre_code]:leading-6 [&_pre_code]:text-ink-soft",
         className,
       )}

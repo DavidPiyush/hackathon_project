@@ -43,7 +43,7 @@ export function HowItWorks() {
 
                 <span
                   aria-hidden="true"
-                  className="font-mono text-3xl font-bold text-ink/[0.06] transition duration-300 group-hover:text-accent/20"
+                  className="font-mono text-3xl font-bold text-watermark transition duration-300 group-hover:text-accent/20"
                 >
                   {stage.id}
                 </span>
@@ -133,7 +133,7 @@ export function HowItWorks() {
         {intelligenceSignals.map((signal) => (
           <Card key={signal.label} interactive className="p-6">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-line bg-white/[0.03] text-accent">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-line bg-raise text-accent">
                 <Icon name={signal.icon} />
               </span>
 

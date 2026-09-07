@@ -2,9 +2,16 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
-// Unmount between tests so queries never see a previous render's DOM.
+// Unmount between tests so queries never see a previous render DOM, and clear
+// persisted console state so one test cannot seed the next one.
 afterEach(() => {
   cleanup();
+
+  try {
+    window.localStorage.clear();
+  } catch {
+    // Storage unavailable in this environment.
+  }
 });
 
 /**

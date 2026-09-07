@@ -1,24 +1,27 @@
-import { site, dashboardNav, dashboardUtilityNav } from "@/lib/data/site";
+import { site } from "@/lib/data/site";
 
 /**
  * Sitemap.
  *
- * Built from the same navigation tables the interface uses, so a new page
- * cannot be added to the nav and forgotten here.
+ * Only public, indexable pages. The console is disallowed in `robots.js`, so
+ * listing its routes here would hand crawlers contradictory instructions —
+ * advertising URLs it has just been told not to fetch.
  */
 export default function sitemap() {
   const now = new Date();
 
-  const staticRoutes = ["/", "/docs", "/docs/api", "/security", "/privacy"];
+  const routes = [
+    { path: "/", priority: 1, changeFrequency: "weekly" },
+    { path: "/docs", priority: 0.8, changeFrequency: "monthly" },
+    { path: "/docs/api", priority: 0.7, changeFrequency: "monthly" },
+    { path: "/security", priority: 0.6, changeFrequency: "yearly" },
+    { path: "/privacy", priority: 0.5, changeFrequency: "yearly" },
+  ];
 
-  const consoleRoutes = [...dashboardNav, ...dashboardUtilityNav].map(
-    (item) => item.href,
-  );
-
-  return [...staticRoutes, ...consoleRoutes].map((route) => ({
-    url: new URL(route, site.url).toString(),
+  return routes.map((route) => ({
+    url: new URL(route.path, site.url).toString(),
     lastModified: now,
-    changeFrequency: route === "/" ? "weekly" : "monthly",
-    priority: route === "/" ? 1 : route.startsWith("/dashboard") ? 0.6 : 0.8,
+    changeFrequency: route.changeFrequency,
+    priority: route.priority,
   }));
 }

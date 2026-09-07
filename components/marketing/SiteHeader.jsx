@@ -9,6 +9,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Button, IconButton } from "@/components/ui/Button";
 import { StatusDot } from "@/components/ui/Badge";
 import { Container } from "@/components/ui/Layout";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 /** Section ids observed for the active-link underline. */
 const SECTION_IDS = marketingNav
@@ -123,7 +124,7 @@ export function SiteHeader() {
                   "relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition duration-200",
                   active
                     ? "text-accent"
-                    : "text-ink-muted hover:bg-white/5 hover:text-ink",
+                    : "text-ink-muted hover:bg-raise-md hover:text-ink",
                 )}
               >
                 <Icon name={item.icon} className="text-[11px]" />
@@ -140,7 +141,9 @@ export function SiteHeader() {
 
         {/* Desktop actions */}
         <div className="hidden shrink-0 items-center gap-3 md:flex">
-          <span className="flex items-center gap-2 rounded-lg border border-line bg-white/[0.02] px-3 py-2 text-xs text-ink-muted">
+          <ThemeToggle />
+
+          <span className="hidden items-center gap-2 rounded-lg border border-line bg-raise px-3 py-2 text-xs text-ink-muted lg:flex">
             <StatusDot tone="safe" />
             Operational
           </span>
@@ -150,16 +153,19 @@ export function SiteHeader() {
           </Button>
         </div>
 
-        {/* Mobile trigger */}
-        <IconButton
-          icon={menuOpen ? "close" : "bars"}
-          label={menuOpen ? "Close navigation" : "Open navigation"}
-          variant="secondary"
-          onClick={() => setMenuOpen((open) => !open)}
-          aria-expanded={menuOpen}
-          aria-controls="mobile-navigation"
-          className="md:hidden"
-        />
+        {/* Mobile: theme switch stays visible outside the sheet */}
+        <div className="flex items-center gap-2 md:hidden">
+          <ThemeToggle compact />
+
+          <IconButton
+            icon={menuOpen ? "close" : "bars"}
+            label={menuOpen ? "Close navigation" : "Open navigation"}
+            variant="secondary"
+            onClick={() => setMenuOpen((open) => !open)}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-navigation"
+          />
+        </div>
       </Container>
 
       {/* Mobile sheet */}
@@ -175,7 +181,7 @@ export function SiteHeader() {
                 key={item.name}
                 href={item.href}
                 onClick={closeMenu}
-                className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-ink-muted transition duration-200 hover:bg-white/5 hover:text-accent"
+                className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-ink-muted transition duration-200 hover:bg-raise-md hover:text-accent"
               >
                 <Icon name={item.icon} />
                 {item.name}

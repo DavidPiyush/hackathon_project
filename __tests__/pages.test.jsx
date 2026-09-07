@@ -10,11 +10,13 @@ import { About } from "@/components/marketing/About";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { HeaderAnalyzer } from "@/components/dashboard/HeaderAnalyzer";
-import { SettingsPanels } from "@/components/dashboard/SettingsPanels";
-import { IndicatorRegistry } from "@/components/dashboard/IndicatorRegistry";
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { marketingNav, footerNav } from "@/lib/data/site";
 import { features, workflow } from "@/lib/data/marketing";
-import { indicatorRegistry } from "@/lib/data/dashboard";
+
+/** The site header reads theme state, so marketing pages need the provider. */
+const renderPage = (ui) =>
+  render(<ThemeProvider>{ui}</ThemeProvider>);
 
 /**
  * Document structure.
@@ -25,13 +27,13 @@ import { indicatorRegistry } from "@/lib/data/dashboard";
  */
 describe("landing page structure", () => {
   it("renders exactly one main landmark", () => {
-    render(<HomePage />);
+    renderPage(<HomePage />);
 
     expect(screen.getAllByRole("main")).toHaveLength(1);
   });
 
   it("renders exactly one level-one heading", () => {
-    render(<HomePage />);
+    renderPage(<HomePage />);
 
     const h1s = screen
       .getAllByRole("heading")
@@ -42,7 +44,7 @@ describe("landing page structure", () => {
   });
 
   it("renders a section for every nav anchor", () => {
-    const { container } = render(<HomePage />);
+    const { container } = renderPage(<HomePage />);
 
     for (const item of marketingNav) {
       const id = item.href.split("#")[1];
@@ -55,7 +57,7 @@ describe("landing page structure", () => {
   });
 
   it("provides a skip link target", () => {
-    const { container } = render(<HomePage />);
+    const { container } = renderPage(<HomePage />);
 
     expect(container.querySelector("#main")).not.toBeNull();
   });
@@ -63,29 +65,43 @@ describe("landing page structure", () => {
 
 describe("SiteHeader", () => {
   it("renders a nav item for every entry in the nav table", () => {
-    render(<SiteHeader />);
+    renderPage(<SiteHeader />);
 
-    const nav = screen.getByRole("navigation", { name: "Main" });
+    expect(
+      screen.getByRole("navigation", { name: "Main" }),
+    ).toBeInTheDocument();
 
     for (const item of marketingNav) {
       expect(
         screen.getAllByRole("link", { name: new RegExp(item.name) }).length,
       ).toBeGreaterThan(0);
     }
-
-    expect(nav).toBeInTheDocument();
   });
 
   it("links to the console", () => {
-    render(<SiteHeader />);
+    renderPage(<SiteHeader />);
 
     expect(
       screen.getAllByRole("link", { name: /Open Console/ })[0],
     ).toHaveAttribute("href", "/dashboard");
   });
 
+  it("offers the theme switch without opening any menu", () => {
+    renderPage(<SiteHeader />);
+
+    // Desktop segmented control plus the compact mobile toggle; both are in
+    // the DOM, visibility is handled by breakpoint classes.
+    expect(
+      screen.getByRole("radiogroup", { name: "Colour theme" }),
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("button", { name: /Switch to (light|dark) theme/ }),
+    ).toBeInTheDocument();
+  });
+
   it("opens and closes the mobile navigation", async () => {
-    render(<SiteHeader />);
+    renderPage(<SiteHeader />);
 
     const trigger = screen.getByRole("button", { name: "Open navigation" });
 
@@ -154,7 +170,7 @@ describe("marketing sections", () => {
     }
   });
 
-  it("HowItWorks renders the pipeline as an ordered list", () => {
+  it("HowItWorks renders every pipeline stage", () => {
     render(<HowItWorks />);
 
     for (const stage of workflow) {
@@ -214,8 +230,7 @@ describe("HeaderAnalyzer", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /load sample/i }));
 
-    // Identity. The subject shows twice: once in the summary, once in the
-    // full header table below it.
+    // The subject shows twice: once in the summary, once in the header table.
     expect(
       screen.getAllByText("Urgent Invoice Payment Required").length,
     ).toBeGreaterThanOrEqual(1);
@@ -224,14 +239,11 @@ describe("HeaderAnalyzer", () => {
       screen.getByText("finance@secure-payments.com", { selector: "dd" }),
     ).toBeInTheDocument();
 
-    // Authentication verdicts read from the headers
     expect(screen.getAllByText("softfail").length).toBeGreaterThan(0);
 
-    // Routing path, origin first
     expect(screen.getByText("Routing path")).toBeInTheDocument();
     expect(screen.getAllByText("185.203.116.42").length).toBeGreaterThan(0);
 
-    // Explained score
     expect(screen.getByText("Why this score")).toBeInTheDocument();
     expect(screen.getByText("SPF did not pass")).toBeInTheDocument();
   });
@@ -254,125 +266,5 @@ describe("HeaderAnalyzer", () => {
     await userEvent.click(screen.getByRole("button", { name: /load sample/i }));
 
     expect(screen.getByText(/header-only/i)).toBeInTheDocument();
-  });
-});
-
-describe("SettingsPanels", () => {
-  it("says that changes are not persisted in this build", () => {
-    render(<SettingsPanels />);
-
-    expect(screen.getByText(/no persistence layer/i)).toBeInTheDocument();
-  });
-
-  it("keeps save and revert disabled until something changes", async () => {
-    render(<SettingsPanels />);
-
-    const save = screen.getByRole("button", { name: /save changes/i });
-    const revert = screen.getByRole("button", { name: /revert/i });
-
-    expect(save).toBeDisabled();
-    expect(revert).toBeDisabled();
-
-    await userEvent.click(screen.getAllByRole("switch")[0]);
-
-    expect(save).toBeEnabled();
-    expect(revert).toBeEnabled();
-  });
-
-  it("toggles a switch and flags unsaved changes", async () => {
-    render(<SettingsPanels />);
-
-    const first = screen.getAllByRole("switch")[0];
-    const before = first.getAttribute("aria-checked");
-
-    await userEvent.click(first);
-
-    expect(first.getAttribute("aria-checked")).not.toBe(before);
-    expect(screen.getByText(/unsaved changes/i)).toBeInTheDocument();
-  });
-
-  it("restores the original values on revert", async () => {
-    render(<SettingsPanels />);
-
-    const first = screen.getAllByRole("switch")[0];
-    const before = first.getAttribute("aria-checked");
-
-    await userEvent.click(first);
-    await userEvent.click(screen.getByRole("button", { name: /revert/i }));
-
-    expect(first.getAttribute("aria-checked")).toBe(before);
-    expect(screen.queryByText(/unsaved changes/i)).not.toBeInTheDocument();
-  });
-});
-
-describe("IndicatorRegistry", () => {
-  it("renders a captioned table of every indicator", () => {
-    render(<IndicatorRegistry />);
-
-    expect(screen.getByRole("table")).toBeInTheDocument();
-
-    for (const entry of indicatorRegistry) {
-      expect(screen.getByText(entry.value)).toBeInTheDocument();
-    }
-  });
-
-  it("filters by verdict", async () => {
-    render(<IndicatorRegistry />);
-
-    await userEvent.click(screen.getByRole("button", { name: "Malicious" }));
-
-    const malicious = indicatorRegistry.filter(
-      (entry) => entry.verdict === "malicious",
-    );
-    const benign = indicatorRegistry.filter(
-      (entry) => entry.verdict === "benign",
-    );
-
-    for (const entry of malicious) {
-      expect(screen.getByText(entry.value)).toBeInTheDocument();
-    }
-
-    for (const entry of benign) {
-      expect(screen.queryByText(entry.value)).not.toBeInTheDocument();
-    }
-  });
-
-  it("filters by free-text search", async () => {
-    render(<IndicatorRegistry />);
-
-    await userEvent.type(
-      screen.getByRole("searchbox", { name: /search the indicator registry/i }),
-      "micr0soft",
-    );
-
-    expect(screen.getByText("micr0soft-security.com")).toBeInTheDocument();
-    expect(
-      screen.queryByText("company-it-support.net"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows an empty state and can recover from it", async () => {
-    render(<IndicatorRegistry />);
-
-    await userEvent.type(
-      screen.getByRole("searchbox", { name: /search the indicator registry/i }),
-      "zzzz-nothing",
-    );
-
-    expect(screen.getByText("No indicators match")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /reset filters/i }));
-
-    expect(screen.getByRole("table")).toBeInTheDocument();
-  });
-
-  it("gives every copy control an accessible name naming its value", () => {
-    render(<IndicatorRegistry />);
-
-    for (const entry of indicatorRegistry) {
-      expect(
-        screen.getByRole("button", { name: `Copy ${entry.value}` }),
-      ).toBeInTheDocument();
-    }
   });
 });

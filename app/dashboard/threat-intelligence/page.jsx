@@ -1,13 +1,17 @@
 import { cn } from "@/lib/utils/cn";
 import { tone as resolveTone } from "@/lib/utils/tones";
-import { indicatorRegistry, campaigns } from "@/lib/data/dashboard";
+import { campaigns } from "@/lib/data/dashboard";
 import { Icon } from "@/components/ui/Icon";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { StatCard, DistributionBar } from "@/components/ui/DataDisplay";
 import { PageHeader, PageBody } from "@/components/dashboard/PageHeader";
 import { IndicatorRegistry } from "@/components/dashboard/IndicatorRegistry";
+import {
+  IntelStats,
+  IntelComposition,
+  VerdictRules,
+} from "@/components/dashboard/IntelStats";
 
 export const metadata = {
   title: "Threat Intelligence",
@@ -16,91 +20,26 @@ export const metadata = {
 };
 
 export default function ThreatIntelligencePage() {
-  const malicious = indicatorRegistry.filter(
-    (entry) => entry.verdict === "malicious",
-  ).length;
-
-  const suspicious = indicatorRegistry.filter(
-    (entry) => entry.verdict === "suspicious",
-  ).length;
-
-  const sightings = indicatorRegistry.reduce(
-    (total, entry) => total + entry.sightings,
-    0,
-  );
-
-  // Composition by indicator type, derived from the registry itself.
-  const typeCounts = indicatorRegistry.reduce((counts, entry) => {
-    counts[entry.type] = (counts[entry.type] ?? 0) + 1;
-
-    return counts;
-  }, {});
-
-  const typeTones = ["critical", "high", "warn", "info", "safe"];
-
-  const distribution = Object.entries(typeCounts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([label, value], index) => ({
-      label,
-      value,
-      tone: typeTones[index % typeTones.length],
-    }));
-
   return (
     <>
       <PageHeader
         eyebrow="Intelligence"
         eyebrowIcon="network"
         title="Threat Intelligence"
-        description="Indicators extracted from analysed messages, enriched with DNS, RDAP and ASN context, then correlated into campaign clusters across cases."
+        description="Indicators extracted from analysed messages, enriched with DNS, RDAP and ASN context, then correlated into campaign clusters. Register new indicators, run enrichment, or override a verdict."
         meta={[
           { icon: "refresh", label: "Last cycle", value: "14 min ago" },
           { icon: "database", label: "Sources", value: "DNS · RDAP · GeoIP" },
         ]}
         actions={
-          <>
-            <Button icon="download">Export IOCs</Button>
-
-            <Button href="/dashboard/geoip" variant="secondary" icon="map">
-              GeoIP view
-            </Button>
-          </>
+          <Button href="/dashboard/geoip" variant="secondary" icon="map">
+            GeoIP view
+          </Button>
         }
       />
 
       <PageBody className="space-y-6">
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            icon="fingerprint"
-            label="Registered indicators"
-            value={indicatorRegistry.length}
-            detail="Across all investigations"
-          />
-
-          <StatCard
-            icon="ban"
-            label="Confirmed malicious"
-            value={malicious}
-            detail="Verdict assigned after enrichment"
-            tone="critical"
-          />
-
-          <StatCard
-            icon="warning"
-            label="Suspicious"
-            value={suspicious}
-            detail="Awaiting further evidence"
-            tone="warn"
-          />
-
-          <StatCard
-            icon="eye"
-            label="Total sightings"
-            value={sightings}
-            detail="Observations across the corpus"
-            tone="info"
-          />
-        </div>
+        <IntelStats />
 
         {/* ================= REGISTRY ================= */}
         <section aria-labelledby="registry-heading" className="space-y-4">
@@ -165,7 +104,7 @@ export default function ThreatIntelligencePage() {
                           ].map((item) => (
                             <div
                               key={item.label}
-                              className="rounded-lg border border-line bg-white/[0.02] px-3 py-2 text-center"
+                              className="rounded-lg border border-line bg-raise px-3 py-2 text-center"
                             >
                               <dt className="text-[9px] uppercase tracking-wider text-ink-faint">
                                 {item.label}
@@ -185,70 +124,8 @@ export default function ThreatIntelligencePage() {
           </section>
 
           <div className="space-y-5">
-            <Card className="p-5">
-              <CardHeader
-                icon="layers"
-                title="Registry composition"
-                subtitle="Indicators by type"
-                level={2}
-              />
-
-              <DistributionBar data={distribution} className="mt-5" />
-            </Card>
-
-            <Card className="p-5">
-              <CardHeader
-                icon="scale"
-                title="How verdicts are assigned"
-                subtitle="Nothing is marked malicious on a single signal"
-                level={2}
-              />
-
-              <ol className="mt-5 space-y-3">
-                {[
-                  {
-                    verdict: "malicious",
-                    tone: "critical",
-                    rule: "Corroborated by two or more independent signals, or observed in a confirmed campaign.",
-                  },
-                  {
-                    verdict: "suspicious",
-                    tone: "warn",
-                    rule: "One strong signal, or several weak ones, without corroboration yet.",
-                  },
-                  {
-                    verdict: "benign",
-                    tone: "safe",
-                    rule: "Known-good infrastructure with a consistent observation history.",
-                  },
-                  {
-                    verdict: "unknown",
-                    tone: "neutral",
-                    rule: "Insufficient evidence. Explicitly recorded rather than assumed safe.",
-                  },
-                ].map((item) => {
-                  const t = resolveTone(item.tone);
-
-                  return (
-                    <li key={item.verdict} className="flex items-start gap-3">
-                      <span
-                        className={cn(
-                          "shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider",
-                          t.bg,
-                          t.text,
-                        )}
-                      >
-                        {item.verdict}
-                      </span>
-
-                      <p className="text-[11px] leading-5 text-ink-soft">
-                        {item.rule}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ol>
-            </Card>
+            <IntelComposition />
+            <VerdictRules />
           </div>
         </div>
       </PageBody>

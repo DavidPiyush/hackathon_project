@@ -9,9 +9,9 @@ const VARIANTS = {
     "bg-accent text-on-accent font-semibold hover:bg-accent-bright shadow-[0_0_0_0_transparent] hover:shadow-[0_8px_28px_-10px_var(--color-accent)]",
   /** Secondary actions that sit beside a primary. */
   secondary:
-    "border border-white/10 bg-white/[0.03] text-ink hover:border-accent/35 hover:bg-accent/[0.06] hover:text-accent",
+    "border border-line bg-raise text-ink hover:border-accent/35 hover:bg-accent/[0.06] hover:text-accent",
   /** Low-emphasis actions inside dense UI. */
-  ghost: "text-ink-muted hover:bg-white/5 hover:text-accent",
+  ghost: "text-ink-muted hover:bg-raise-md hover:text-accent",
   /** Tinted variant used for the header call to action. */
   tinted:
     "border border-accent/25 bg-accent/10 text-accent hover:bg-accent/20 hover:border-accent/40",

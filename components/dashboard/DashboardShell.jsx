@@ -16,6 +16,7 @@ import { Icon } from "@/components/ui/Icon";
 import { IconButton, Button } from "@/components/ui/Button";
 import { Badge, StatusDot } from "@/components/ui/Badge";
 import { Popover } from "@/components/ui/Popover";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 /** Header height, shared by the sticky sidebar offset so the two stay aligned. */
 const HEADER_H = "h-16";
@@ -126,6 +127,10 @@ export function DashboardShell({ children }) {
               Operational
             </span>
 
+            {/* Theme: segmented on wide screens, single toggle on narrow */}
+            <ThemeToggle className="hidden lg:inline-flex" />
+            <ThemeToggle compact className="lg:hidden" />
+
             {/* Quick jump to triage */}
             <IconButton
               icon="search"
@@ -196,7 +201,7 @@ export function DashboardShell({ children }) {
               trigger={(props) => (
                 <button
                   type="button"
-                  className="flex items-center gap-2 rounded-lg border border-line px-2.5 py-2 transition duration-200 hover:bg-white/5"
+                  className="flex items-center gap-2 rounded-lg border border-line px-2.5 py-2 transition duration-200 hover:bg-raise-md"
                   {...props}
                 >
                   <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/10 font-mono text-[10px] font-bold text-accent">
@@ -226,7 +231,7 @@ export function DashboardShell({ children }) {
                   <Link
                     key={item.name}
                     href={item.href}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs text-ink-muted transition duration-200 hover:bg-white/5 hover:text-accent"
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs text-ink-muted transition duration-200 hover:bg-raise-md hover:text-accent"
                   >
                     <Icon name={item.icon} />
                     {item.name}
@@ -235,7 +240,7 @@ export function DashboardShell({ children }) {
 
                 <Link
                   href="/"
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs text-ink-muted transition duration-200 hover:bg-white/5 hover:text-accent"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs text-ink-muted transition duration-200 hover:bg-raise-md hover:text-accent"
                 >
                   <Icon name="arrow-left" />
                   Back to site
@@ -265,7 +270,7 @@ export function DashboardShell({ children }) {
               type="button"
               aria-label="Close navigation"
               onClick={() => setDrawerOpen(false)}
-              className="absolute inset-0 bg-abyss/80 backdrop-blur-sm motion-safe:animate-fade"
+              className="absolute inset-0 bg-scrim backdrop-blur-sm motion-safe:animate-fade"
             />
 
             <div className="absolute inset-y-0 left-0 flex w-72 flex-col border-r border-line-strong bg-canvas shadow-2xl motion-safe:animate-rise">
@@ -323,7 +328,7 @@ function SidebarBody({ isActive }) {
                 "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition duration-200",
                 active
                   ? "bg-accent/10 font-medium text-accent"
-                  : "text-ink-muted hover:bg-white/5 hover:text-ink",
+                  : "text-ink-muted hover:bg-raise-md hover:text-ink",
               )}
             >
               {/* Active indicator rail */}
@@ -358,7 +363,7 @@ function SidebarBody({ isActive }) {
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition duration-200",
                 active
                   ? "bg-accent/10 font-medium text-accent"
-                  : "text-ink-muted hover:bg-white/5 hover:text-accent",
+                  : "text-ink-muted hover:bg-raise-md hover:text-accent",
               )}
             >
               <Icon name={item.icon} className="w-4 shrink-0" />

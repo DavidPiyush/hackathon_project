@@ -23,5 +23,9 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.js"],
     include: ["__tests__/**/*.test.{js,jsx}"],
     css: false,
+    // The console tests drive the real provider tree and type with
+    // userEvent, which simulates per-character delays. The 5s default is
+    // enough in isolation but not when suites run in parallel.
+    testTimeout: 20000,
   },
 });

@@ -257,7 +257,7 @@ Subject: Urgent Invoice Payment Required
                 ].map((item) => (
                   <div
                     key={item.label}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white/[0.02] px-3 py-2"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-line bg-raise px-3 py-2"
                   >
                     <dt className="text-[11px] text-ink-faint">
                       {item.label}

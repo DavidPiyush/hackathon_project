@@ -46,6 +46,24 @@ export function Modal({
   const pointerDownOnBackdrop = useRef(false);
   const titleId = useId();
 
+  /**
+   * `onClose` is nearly always an inline arrow, so its identity changes on
+   * every render of the parent. Holding it in a ref keeps the setup effect
+   * below dependent on `open` alone.
+   *
+   * This is not a micro-optimisation: when the effect re-ran on every render
+   * it re-focused the panel, which meant typing into a form inside a dialog
+   * lost focus after the first character.
+   */
+  const onCloseRef = useRef(onClose);
+
+  // Refs must not be written during render, so the latest handler is captured
+  // after commit. The initial value is already correct, so Escape works from
+  // the first render onwards.
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   const sizes = {
     sm: "max-w-md",
     md: "max-w-xl",
@@ -105,7 +123,7 @@ export function Modal({
     const onKeyDown = (event) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
       } else if (event.key === "Tab") {
         trapFocus(event);
       }
@@ -136,7 +154,9 @@ export function Modal({
       body.style.paddingRight = previousPadding;
       previouslyFocused.current?.focus?.();
     };
-  }, [open, onClose, trapFocus]);
+    // Deliberately only `open`: re-running this on any parent render would
+    // re-focus the panel and break typing inside the dialog.
+  }, [open, trapFocus]);
 
   if (!open) {
     return null;
@@ -144,7 +164,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-100 flex items-center justify-center bg-abyss/80 p-4 backdrop-blur-sm motion-safe:animate-fade"
+      className="fixed inset-0 z-100 flex items-center justify-center bg-scrim p-4 backdrop-blur-sm motion-safe:animate-fade"
       // Only close when the press *starts* on the backdrop, so selecting text
       // inside the dialog and releasing outside it does not dismiss the dialog.
       onPointerDown={(event) => {

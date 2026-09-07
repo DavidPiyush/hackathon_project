@@ -74,7 +74,7 @@ export function About() {
             {technologyStack.map((item) => (
               <div
                 key={item.label}
-                className="flex items-center gap-3 rounded-lg border border-line bg-white/[0.02] px-3 py-3 transition duration-200 hover:border-accent/25"
+                className="flex items-center gap-3 rounded-lg border border-line bg-raise px-3 py-3 transition duration-200 hover:border-accent/25"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
                   <Icon name={item.icon} className="text-sm" />
@@ -115,7 +115,7 @@ export function About() {
 
               <span
                 aria-hidden="true"
-                className="font-mono text-2xl font-bold text-ink/[0.06]"
+                className="font-mono text-2xl font-bold text-watermark"
               >
                 {item.number}
               </span>

@@ -118,7 +118,7 @@ export function FeatureCard({
       {number && (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute -top-3 right-3 select-none font-mono text-6xl font-bold text-ink/[0.04] transition duration-300 group-hover:text-accent/[0.07]"
+          className="pointer-events-none absolute -top-3 right-3 select-none font-mono text-6xl font-bold text-watermark transition duration-300 group-hover:text-accent/[0.07]"
         >
           {number}
         </span>
@@ -167,7 +167,7 @@ export function KeyValue({ label, value, mono = false, tone, className }) {
   return (
     <div
       className={cn(
-        "rounded-lg border border-line bg-white/[0.02] px-3 py-2.5",
+        "rounded-lg border border-line bg-raise px-3 py-2.5",
         className,
       )}
     >
@@ -198,7 +198,7 @@ export function EmptyState({
 }) {
   return (
     <div className={cn("px-6 py-16 text-center", className)}>
-      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-line bg-white/[0.02] text-ink-faint">
+      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-line bg-raise text-ink-faint">
         <Icon name={icon} className="text-lg" />
       </span>
 

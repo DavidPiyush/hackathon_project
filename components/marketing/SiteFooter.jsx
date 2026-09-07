@@ -8,7 +8,7 @@ import { IconButton } from "@/components/ui/Button";
 
 export function SiteFooter() {
   return (
-    <footer id="footer" className="border-t border-line bg-abyss">
+    <footer id="footer" className="border-t border-line bg-sunken">
       <Container className="py-14">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
           {/* ---------------- Brand ---------------- */}
@@ -60,7 +60,7 @@ export function SiteFooter() {
         </div>
 
         {/* ---------------- Positioning strip ---------------- */}
-        <div className="mt-12 flex flex-col gap-4 rounded-xl border border-line bg-white/[0.02] p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-12 flex flex-col gap-4 rounded-xl border border-line bg-raise p-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
               <Icon name="lock" />
@@ -100,7 +100,7 @@ export function SiteFooter() {
 
             <Link
               href="/docs"
-              className="ml-2 flex items-center gap-1.5 rounded-lg px-3 py-2 transition duration-200 hover:bg-white/5 hover:text-accent"
+              className="ml-2 flex items-center gap-1.5 rounded-lg px-3 py-2 transition duration-200 hover:bg-raise-md hover:text-accent"
             >
               Docs
               <Icon name="external" className="text-[9px]" />

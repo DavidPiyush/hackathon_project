@@ -31,7 +31,7 @@ export function Meter({
       aria-valuemax={max}
       aria-label={label}
       className={cn(
-        "w-full overflow-hidden rounded-full bg-white/[0.06]",
+        "w-full overflow-hidden rounded-full bg-raise-md",
         heights[size] ?? heights.md,
         className,
       )}

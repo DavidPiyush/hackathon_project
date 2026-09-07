@@ -39,7 +39,7 @@ export default function Error({ error, reset }) {
           </p>
 
           {error?.digest && (
-            <p className="ioc mx-auto mt-5 inline-block rounded-lg border border-line bg-white/[0.03] px-3 py-2 text-ink-muted">
+            <p className="ioc mx-auto mt-5 inline-block rounded-lg border border-line bg-raise px-3 py-2 text-ink-muted">
               Reference: {error.digest}
             </p>
           )}

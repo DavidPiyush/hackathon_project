@@ -5,7 +5,7 @@ import { site } from "@/lib/data/site";
 import { Icon } from "@/components/ui/Icon";
 import { Button } from "@/components/ui/Button";
 import { Badge, StatusDot } from "@/components/ui/Badge";
-import { GlowBackdrop } from "@/components/ui/Layout";
+import { Container, GlowBackdrop } from "@/components/ui/Layout";
 import { RiskMeter } from "@/components/ui/DataDisplay";
 
 export function Hero() {
@@ -13,7 +13,8 @@ export function Hero() {
     <section id="home" className="relative overflow-hidden scroll-mt-20">
       <GlowBackdrop variant="top" />
 
-      <div className="relative mx-auto w-full max-w-7xl px-6 py-20 lg:px-8 lg:py-28">
+      {/* Width comes from Container, not a second hardcoded max-width. */}
+      <Container className="relative py-20 lg:py-28">
         <div className="grid items-center gap-16 lg:grid-cols-2">
           {/* ---------------- Left: the pitch ---------------- */}
           <div className="motion-safe:animate-rise">
@@ -101,7 +102,7 @@ export function Hero() {
               {/* Subject under analysis */}
               <div className="relative mt-4 rounded-xl border border-line bg-canvas p-4">
                 <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-ink-muted">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-raise-md text-ink-muted">
                     <Icon name="envelope" />
                   </span>
 
@@ -124,7 +125,7 @@ export function Hero() {
                   return (
                     <li
                       key={check.title}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white/[0.02] p-3"
+                      className="flex items-center justify-between gap-3 rounded-lg border border-line bg-raise p-3"
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <Icon
@@ -170,7 +171,7 @@ export function Hero() {
             </div>
           </div>
         </div>
-      </div>
+      </Container>
     </section>
   );
 }

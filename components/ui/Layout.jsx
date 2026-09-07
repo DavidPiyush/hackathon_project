@@ -2,19 +2,32 @@ import { cn } from "@/lib/utils/cn";
 
 import { Eyebrow } from "@/components/ui/Badge";
 
-/** Consistent horizontal gutters and max width for every page region. */
+/**
+ * Consistent horizontal gutters and max width for every page region.
+ *
+ * `lg` — the default, and what the whole landing page uses — is deliberately
+ * wider than Tailwind's `max-w-7xl` (1280px). At that cap a 1440px or 1920px
+ * display showed a large dead gutter on both sides, which read as an unwanted
+ * page margin next to the full-bleed dashboard. 88rem keeps long-form text
+ * readable (prose blocks cap themselves at `max-w-3xl`) while actually using
+ * a wide screen.
+ *
+ * The gutter also grows with the viewport, so content never sits flush against
+ * the edge on large displays.
+ */
 export function Container({ children, size = "lg", className, ...props }) {
   const sizes = {
     sm: "max-w-3xl",
     md: "max-w-5xl",
-    lg: "max-w-7xl",
+    lg: "max-w-[88rem]",
+    xl: "max-w-[104rem]",
     full: "max-w-none",
   };
 
   return (
     <div
       className={cn(
-        "mx-auto w-full px-6 lg:px-8",
+        "mx-auto w-full px-5 sm:px-6 lg:px-10 xl:px-14",
         sizes[size] ?? sizes.lg,
         className,
       )}
