@@ -152,11 +152,7 @@ const intelligence = [
 
 export default function HowItWorks() {
   return (
-    <main className="min-h-screen bg-[#071426] text-[#E7EEF7]">
-
-      {/* =====================================================
-          HERO
-      ===================================================== */}
+    <main className="min-h-screen bg-[#071426] text-[#E7EEF7]" id='how-it-works'>
 
       <section
         className="
