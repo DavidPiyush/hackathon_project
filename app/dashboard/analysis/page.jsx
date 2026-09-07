@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/auth/dal";
 import { emails } from "@/lib/data/emails";
 import { analysisSignals, custodyTrail } from "@/lib/data/dashboard";
 import { cn } from "@/lib/utils/cn";
@@ -26,7 +27,9 @@ export const metadata = {
 /** The worked example shown beneath the live analyzer. */
 const CASE_STUDY_ID = "EM-2041";
 
-export default function AnalysisPage() {
+export default async function AnalysisPage() {
+  await requireUser("/dashboard/analysis");
+
   const subject = emails.find((email) => email.id === CASE_STUDY_ID);
 
   return (

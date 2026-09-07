@@ -148,8 +148,12 @@ export function SiteHeader() {
             Operational
           </span>
 
-          <Button href="/dashboard" variant="tinted" size="sm" iconEnd="arrow-right">
-            Open Console
+          <Button href="/login" variant="ghost" size="sm">
+            Sign in
+          </Button>
+
+          <Button href="/signup" variant="tinted" size="sm" iconEnd="arrow-right">
+            Get started
           </Button>
         </div>
 
@@ -189,14 +193,24 @@ export function SiteHeader() {
             ))}
 
             <Button
-              href="/dashboard"
+              href="/login"
+              variant="secondary"
+              size="md"
+              onClick={closeMenu}
+              className="mt-3 w-full"
+            >
+              Sign in
+            </Button>
+
+            <Button
+              href="/signup"
               variant="tinted"
               size="md"
               iconEnd="arrow-right"
               onClick={closeMenu}
-              className="mt-3 w-full"
+              className="mt-2 w-full"
             >
-              Open Console
+              Get started
             </Button>
           </Container>
         </nav>

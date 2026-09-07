@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/auth/dal";
 import { Button } from "@/components/ui/Button";
 import { PageHeader, PageBody } from "@/components/dashboard/PageHeader";
 import { InboxClient } from "@/components/dashboard/InboxClient";
@@ -16,7 +17,11 @@ export const metadata = {
  * server would freeze them at the seed values and let them contradict the list
  * directly beneath.
  */
-export default function InboxPage() {
+export default async function InboxPage() {
+  // Authoritative check. Proxy is optimistic; this is what actually gates
+  // the page, per the Next.js auth guidance on layouts.
+  await requireUser("/dashboard/inbox");
+
   return (
     <>
       <PageHeader

@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/auth/dal";
 import { helpTopics, faqs } from "@/lib/data/dashboard";
 import { site } from "@/lib/data/site";
 import { Icon } from "@/components/ui/Icon";
@@ -22,7 +23,11 @@ const SHORTCUTS = [
   { keys: ["Enter", "Space"], action: "Activate the focused control" },
 ];
 
-export default function HelpPage() {
+export default async function HelpPage() {
+  // Authoritative check. Proxy is optimistic; this is what actually gates
+  // the page, per the Next.js auth guidance on layouts.
+  await requireUser("/dashboard/help");
+
   return (
     <>
       <PageHeader

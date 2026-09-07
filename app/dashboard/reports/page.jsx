@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/auth/dal";
 import { Button } from "@/components/ui/Button";
 import { PageHeader, PageBody } from "@/components/dashboard/PageHeader";
 import { ReportsClient } from "@/components/dashboard/ReportsClient";
@@ -8,7 +9,11 @@ export const metadata = {
     "Audit-ready investigation reports that preserve evidence, findings, confidence and chain of custody.",
 };
 
-export default function ReportsPage() {
+export default async function ReportsPage() {
+  // Authoritative check. Proxy is optimistic; this is what actually gates
+  // the page, per the Next.js auth guidance on layouts.
+  await requireUser("/dashboard/reports");
+
   return (
     <>
       <PageHeader

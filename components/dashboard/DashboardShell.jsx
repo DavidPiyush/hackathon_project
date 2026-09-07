@@ -12,6 +12,8 @@ import {
 } from "@/lib/data/site";
 import { emails } from "@/lib/data/emails";
 import { riskTone } from "@/lib/utils/risk";
+import { initials } from "@/lib/utils/format";
+import { logoutAction } from "@/lib/actions/auth";
 import { Icon } from "@/components/ui/Icon";
 import { IconButton, Button } from "@/components/ui/Button";
 import { Badge, StatusDot } from "@/components/ui/Badge";
@@ -30,8 +32,12 @@ const HEADER_PX = 64;
  * owner of the open state is simpler than lifting it through context. Page
  * content is passed straight through as `children`, so pages themselves stay
  * server components.
+ *
+ * `user` is resolved server-side by the layout and passed in as a prop —
+ * client components cannot import the auth DAL, and the shell needs the
+ * identity for the account menu.
  */
-export function DashboardShell({ children }) {
+export function DashboardShell({ children, user }) {
   const pathname = usePathname();
 
   /**
@@ -205,11 +211,11 @@ export function DashboardShell({ children }) {
                   {...props}
                 >
                   <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/10 font-mono text-[10px] font-bold text-accent">
-                    AR
+                    {initials(user.name)}
                   </span>
 
-                  <span className="hidden text-xs text-ink-soft sm:block">
-                    Analyst
+                  <span className="hidden max-w-32 truncate text-xs text-ink-soft sm:block">
+                    {user.name}
                   </span>
 
                   <Icon
@@ -220,9 +226,14 @@ export function DashboardShell({ children }) {
               )}
             >
               <div className="border-b border-line px-4 py-3">
-                <p className="text-xs font-semibold text-ink">A. Rahman</p>
-                <p className="mt-0.5 text-[10px] text-ink-faint">
-                  Tier 2 Analyst · Read/write
+                <p className="truncate text-xs font-semibold text-ink">
+                  {user.name}
+                </p>
+                <p className="ioc mt-0.5 truncate text-ink-faint">
+                  {user.email}
+                </p>
+                <p className="mt-1 text-[10px] capitalize text-ink-faint">
+                  {user.role} · Read/write
                 </p>
               </div>
 
@@ -246,6 +257,21 @@ export function DashboardShell({ children }) {
                   Back to site
                 </Link>
               </nav>
+
+              {/*
+                Sign-out is a form, not a link: it mutates server state, so it
+                must be a POST. A GET logout link can be triggered by any
+                third-party image tag.
+              */}
+              <form action={logoutAction} className="border-t border-line p-2">
+                <button
+                  type="submit"
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-xs text-critical transition duration-200 hover:bg-critical/10"
+                >
+                  <Icon name="arrow-right" />
+                  Sign out
+                </button>
+              </form>
             </Popover>
           </div>
         </div>
