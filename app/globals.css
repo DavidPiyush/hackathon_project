@@ -1,26 +1,253 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* =========================================================
+   THREATDETECT DESIGN SYSTEM
+   A dark, evidence-first security console theme.
+   Tokens are the single source of truth — components never
+   hardcode a raw hex value.
+========================================================= */
+
+@theme {
+  /* ---- Surfaces: deep navy, layered from darkest to raised ---- */
+  --color-abyss: #02060c;
+  --color-canvas: #050b14;
+  --color-surface: #081522;
+  --color-elevated: #0b1c2c;
+  --color-overlay: #0e2233;
+
+  /* ---- Hairlines ---- */
+  --color-line: #16293c;
+  --color-line-strong: #1f3a52;
+
+  /* ---- Text ---- */
+  --color-ink: #e9f1f9;
+  --color-ink-soft: #a8bcd0;
+  --color-ink-muted: #7b91a8;
+  --color-ink-faint: #55697e;
+
+  /* ---- Brand accent ---- */
+  --color-accent: #22d3ee;
+  --color-accent-bright: #67e8f9;
+  --color-accent-deep: #0e7490;
+  --color-on-accent: #03101a;
+
+  /* ---- Semantic risk scale ---- */
+  --color-critical: #f87171;
+  --color-high: #fb923c;
+  --color-warn: #fbbf24;
+  --color-safe: #34d399;
+  --color-info: #60a5fa;
+
+  /* ---- Typography ---- */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
+
+  /* ---- Motion ---- */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+
+  --animate-rise: rise 0.6s var(--ease-out-quart) both;
+  --animate-fade: fade 0.5s var(--ease-out-quart) both;
+  --animate-sweep: sweep 3.5s ease-in-out infinite;
+  --animate-ping-slow: ping-slow 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-drift: drift 14s ease-in-out infinite;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Radar-style sweep used on the hero analysis panel */
+@keyframes sweep {
+  0%,
+  100% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  99% {
+    transform: translateY(1200%);
+    opacity: 0;
+  }
+}
+
+@keyframes ping-slow {
+  75%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(2%, -3%) scale(1.08);
+  }
+}
+
+/* =========================================================
+   BASE
+========================================================= */
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    /* Offset anchor targets so the sticky header never covers a heading */
+    scroll-padding-top: 5rem;
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* One consistent, always-visible focus ring across the whole app */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 0.375rem;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--color-accent) 30%, transparent);
+    color: var(--color-ink);
+  }
+
+  /* Scrollbars that belong to the theme rather than the OS */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--color-line-strong);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-accent-deep);
+  }
+}
+
+/* =========================================================
+   REUSABLE EFFECT UTILITIES
+========================================================= */
+
+/* Faint blueprint grid — the signature backdrop of the platform */
+@utility bg-blueprint {
+  background-image:
+    linear-gradient(
+      color-mix(in oklab, var(--color-ink) 50%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--color-ink) 50%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 52px 52px;
+}
+
+/* Elevated glass panel */
+@utility panel {
+  border: 1px solid color-mix(in oklab, var(--color-ink) 8%, transparent);
+  background-color: color-mix(in oklab, var(--color-surface) 92%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+/* Cyan text gradient for emphasis inside headlines */
+@utility text-gradient-accent {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-accent-bright),
+    var(--color-accent) 45%,
+    var(--color-info)
+  );
+  background-clip: text;
+  color: transparent;
+}
+
+/* Thin hairline that fades out at both ends */
+@utility rule-fade {
+  height: 1px;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-line-strong) 15%,
+    var(--color-line-strong) 85%,
+    transparent
+  );
+}
+
+/* Monospaced technical value — IOCs, hashes, IPs, ASNs */
+@utility ioc {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  word-break: break-all;
+}
+
+/* =========================================================
+   MOTION PREFERENCES
+========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* =========================================================
+   PRINT — investigation reports must print cleanly
+========================================================= */
+
+@media print {
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  .no-print {
+    display: none !important;
+  }
 }
