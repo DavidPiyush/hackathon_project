@@ -62,7 +62,7 @@ export default function PrivacyPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {SUMMARY.map((item) => (
             <Card key={item.claim} tone={item.tone} className="p-5">
-              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/[0.04]">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-raise-md">
                 <Icon name={item.icon} className="text-ink-soft" />
               </span>
 
@@ -204,7 +204,7 @@ export default function PrivacyPage() {
                 ].map((item) => (
                   <li
                     key={item.text}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white/[0.02] px-3 py-2"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-line bg-raise px-3 py-2"
                   >
                     <span className="text-[11px] text-ink-soft">
                       {item.text}

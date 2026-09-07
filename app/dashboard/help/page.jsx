@@ -107,7 +107,7 @@ export default function HelpPage() {
                       {shortcut.keys.map((key) => (
                         <kbd
                           key={key}
-                          className="rounded border border-line bg-white/5 px-1.5 py-1 font-mono text-[10px] text-ink-soft"
+                          className="rounded border border-line bg-raise-md px-1.5 py-1 font-mono text-[10px] text-ink-soft"
                         >
                           {key}
                         </kbd>
@@ -178,7 +178,7 @@ export default function HelpPage() {
                 ].map((item) => (
                   <div
                     key={item.label}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white/[0.02] px-3 py-2"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-line bg-raise px-3 py-2"
                   >
                     <dt className="text-[11px] text-ink-faint">{item.label}</dt>
                     <dd className="ioc truncate text-ink-soft">{item.value}</dd>

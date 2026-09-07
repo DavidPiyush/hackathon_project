@@ -109,7 +109,7 @@ export function HeaderAnalyzer() {
         </div>
 
         {/* How to obtain headers — genuinely useful, and cheap to include */}
-        <details className="group mt-5 rounded-lg border border-line bg-white/[0.02]">
+        <details className="group mt-5 rounded-lg border border-line bg-raise">
           <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-xs font-medium text-ink-soft">
             Where do I find the raw headers?
             <Icon
@@ -244,7 +244,7 @@ export function HeaderAnalyzer() {
                   <div
                     key={key}
                     className={cn(
-                      "rounded-lg border bg-white/[0.02] p-3",
+                      "rounded-lg border bg-raise p-3",
                       t.border,
                     )}
                   >
@@ -288,7 +288,7 @@ export function HeaderAnalyzer() {
                 {result.hops.map((hop) => (
                   <li
                     key={hop.hop}
-                    className="rounded-lg border border-line bg-white/[0.02] p-3"
+                    className="rounded-lg border border-line bg-raise p-3"
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-accent/25 bg-accent/10 font-mono text-[10px] font-bold text-accent">
@@ -415,7 +415,7 @@ export function HeaderAnalyzer() {
                   {result.headers.map((header, index) => (
                     <tr
                       key={`${header.key}-${index}`}
-                      className="align-top transition duration-150 hover:bg-white/[0.02]"
+                      className="align-top transition duration-150 hover:bg-raise"
                     >
                       <th
                         scope="row"

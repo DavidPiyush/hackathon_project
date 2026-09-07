@@ -72,6 +72,24 @@ import {
   FaScaleBalanced,
   FaBookOpen,
   FaGaugeHigh,
+  FaSun,
+  FaMoon,
+  FaDesktop,
+  FaPenToSquare,
+  FaFloppyDisk,
+  FaRotateLeft,
+  FaCircleXmark,
+  FaSpinner,
+  FaCircleNotch,
+  FaLockOpen,
+  FaFolderPlus,
+  FaTrashCan,
+  FaEnvelopesBulk,
+  FaCheckDouble,
+  FaArrowUpRightDots,
+  FaCircleDot,
+  FaTableList,
+  FaWandMagicSparkles,
 } from "react-icons/fa6";
 
 /**
@@ -158,6 +176,26 @@ export const icons = {
   scale: FaScaleBalanced,
   book: FaBookOpen,
   gauge: FaGaugeHigh,
+
+  // Theme, CRUD and loading affordances
+  sun: FaSun,
+  moon: FaMoon,
+  desktop: FaDesktop,
+  edit: FaPenToSquare,
+  save: FaFloppyDisk,
+  undo: FaRotateLeft,
+  "close-circle": FaCircleXmark,
+  spinner: FaSpinner,
+  loader: FaCircleNotch,
+  unlock: FaLockOpen,
+  "folder-plus": FaFolderPlus,
+  "trash-can": FaTrashCan,
+  "mail-bulk": FaEnvelopesBulk,
+  "check-double": FaCheckDouble,
+  escalate: FaArrowUpRightDots,
+  dot: FaCircleDot,
+  table: FaTableList,
+  magic: FaWandMagicSparkles,
 };
 
 /**

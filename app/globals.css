@@ -2,60 +2,168 @@
 
 /* =========================================================
    THREATDETECT DESIGN SYSTEM
-   A dark, evidence-first security console theme.
-   Tokens are the single source of truth — components never
-   hardcode a raw hex value.
+
+   Two themes, one set of semantic names.
+
+   Raw values live as plain CSS variables on :root (light) and
+   [data-theme="dark"], so switching theme is a single attribute
+   change with no reflow and no flash. `@theme inline` then maps
+   them to Tailwind utilities, emitting `var(--token)` rather than
+   a baked literal — which is what makes runtime swapping work.
+
+   Components reference semantic names only (canvas, surface,
+   raise, ink, accent, critical…). No component holds a hex value,
+   and none of them know which theme is active.
 ========================================================= */
 
-@theme {
-  /* ---- Surfaces: deep navy, layered from darkest to raised ---- */
-  --color-abyss: #02060c;
-  --color-canvas: #050b14;
-  --color-surface: #081522;
-  --color-elevated: #0b1c2c;
-  --color-overlay: #0e2233;
+:root {
+  color-scheme: light;
+
+  /* ---- Surfaces, from deepest to most raised ---- */
+  --td-sunken: #e7edf4;
+  --td-canvas: #f4f7fa;
+  --td-surface: #ffffff;
+  --td-elevated: #eef3f8;
+
+  /* Translucent lifts, layered over whatever sits beneath.
+     These replace the `white/N` overlays a dark-only theme can use;
+     in light mode the lift has to darken instead of lighten. */
+  --td-raise: rgb(13 27 42 / 0.025);
+  --td-raise-md: rgb(13 27 42 / 0.055);
+  --td-raise-lg: rgb(13 27 42 / 0.09);
 
   /* ---- Hairlines ---- */
-  --color-line: #16293c;
-  --color-line-strong: #1f3a52;
+  --td-line: #dce5ef;
+  --td-line-strong: #c2cfdd;
 
   /* ---- Text ---- */
-  --color-ink: #e9f1f9;
-  --color-ink-soft: #a8bcd0;
-  --color-ink-muted: #7b91a8;
-  --color-ink-faint: #55697e;
+  --td-ink: #0b1727;
+  --td-ink-soft: #33475c;
+  --td-ink-muted: #566a80;
+  --td-ink-faint: #6f8296;
 
-  /* ---- Brand accent ---- */
-  --color-accent: #22d3ee;
-  --color-accent-bright: #67e8f9;
-  --color-accent-deep: #0e7490;
-  --color-on-accent: #03101a;
+  /* Oversized ordinal watermarks behind cards */
+  --td-watermark: rgb(11 23 39 / 0.06);
+
+  /* ---- Brand accent. Darker in light mode so text on white clears
+     WCAG AA; the dark theme can afford the brighter cyan. ---- */
+  --td-accent: #0e7490;
+  --td-accent-bright: #0891b2;
+  --td-accent-deep: #164e63;
+  --td-on-accent: #ffffff;
 
   /* ---- Semantic risk scale ---- */
-  --color-critical: #f87171;
-  --color-high: #fb923c;
-  --color-warn: #fbbf24;
-  --color-safe: #34d399;
-  --color-info: #60a5fa;
+  --td-critical: #c92a2a;
+  --td-high: #d9480f;
+  --td-warn: #a16207;
+  --td-safe: #087443;
+  --td-info: #1d4ed8;
 
-  /* ---- Typography ---- */
+  /* ---- Chrome ---- */
+  --td-scrim: rgb(11 23 39 / 0.45);
+  --td-glow: 0.05;
+  --td-grid: 0.05;
+  --td-shadow: rgb(13 27 42 / 0.08);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --td-sunken: #02060c;
+  --td-canvas: #050b14;
+  --td-surface: #081522;
+  --td-elevated: #0b1c2c;
+
+  --td-raise: rgb(255 255 255 / 0.022);
+  --td-raise-md: rgb(255 255 255 / 0.05);
+  --td-raise-lg: rgb(255 255 255 / 0.09);
+
+  --td-line: #16293c;
+  --td-line-strong: #1f3a52;
+
+  --td-ink: #e9f1f9;
+  --td-ink-soft: #a8bcd0;
+  --td-ink-muted: #7b91a8;
+  --td-ink-faint: #55697e;
+
+  --td-watermark: rgb(233 241 249 / 0.05);
+
+  --td-accent: #22d3ee;
+  --td-accent-bright: #67e8f9;
+  --td-accent-deep: #0e7490;
+  --td-on-accent: #03101a;
+
+  --td-critical: #f87171;
+  --td-high: #fb923c;
+  --td-warn: #fbbf24;
+  --td-safe: #34d399;
+  --td-info: #60a5fa;
+
+  --td-scrim: rgb(2 6 12 / 0.8);
+  --td-glow: 0.1;
+  --td-grid: 0.035;
+  --td-shadow: rgb(0 0 0 / 0.5);
+}
+
+/* =========================================================
+   TOKEN -> UTILITY MAPPING
+========================================================= */
+
+@theme inline {
+  --color-sunken: var(--td-sunken);
+  --color-canvas: var(--td-canvas);
+  --color-surface: var(--td-surface);
+  --color-elevated: var(--td-elevated);
+
+  --color-raise: var(--td-raise);
+  --color-raise-md: var(--td-raise-md);
+  --color-raise-lg: var(--td-raise-lg);
+
+  --color-line: var(--td-line);
+  --color-line-strong: var(--td-line-strong);
+
+  --color-ink: var(--td-ink);
+  --color-ink-soft: var(--td-ink-soft);
+  --color-ink-muted: var(--td-ink-muted);
+  --color-ink-faint: var(--td-ink-faint);
+  --color-watermark: var(--td-watermark);
+
+  --color-accent: var(--td-accent);
+  --color-accent-bright: var(--td-accent-bright);
+  --color-accent-deep: var(--td-accent-deep);
+  --color-on-accent: var(--td-on-accent);
+
+  --color-critical: var(--td-critical);
+  --color-high: var(--td-high);
+  --color-warn: var(--td-warn);
+  --color-safe: var(--td-safe);
+  --color-info: var(--td-info);
+
+  --color-scrim: var(--td-scrim);
+
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
 
-  /* ---- Motion ---- */
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
 
-  --animate-rise: rise 0.6s var(--ease-out-quart) both;
-  --animate-fade: fade 0.5s var(--ease-out-quart) both;
+  --animate-rise: rise 0.5s var(--ease-out-quart) both;
+  --animate-fade: fade 0.4s var(--ease-out-quart) both;
+  --animate-slide-in: slide-in 0.35s var(--ease-out-quart) both;
   --animate-sweep: sweep 3.5s ease-in-out infinite;
   --animate-ping-slow: ping-slow 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
   --animate-drift: drift 14s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-progress: progress 1.4s ease-in-out infinite;
 }
+
+/* =========================================================
+   KEYFRAMES
+========================================================= */
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -72,7 +180,18 @@
   }
 }
 
-/* Radar-style sweep used on the hero analysis panel */
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Radar-style sweep on the hero analysis panel */
 @keyframes sweep {
   0%,
   100% {
@@ -106,6 +225,29 @@
   }
 }
 
+/* Skeleton sheen */
+@keyframes shimmer {
+  from {
+    background-position: -160% 0;
+  }
+  to {
+    background-position: 160% 0;
+  }
+}
+
+/* Indeterminate progress bar */
+@keyframes progress {
+  0% {
+    transform: translateX(-100%) scaleX(0.4);
+  }
+  50% {
+    transform: translateX(0%) scaleX(0.6);
+  }
+  100% {
+    transform: translateX(100%) scaleX(0.4);
+  }
+}
+
 /* =========================================================
    BASE
 ========================================================= */
@@ -113,35 +255,73 @@
 @layer base {
   html {
     scroll-behavior: smooth;
-    /* Offset anchor targets so the sticky header never covers a heading */
+    /* Clear the sticky header when an anchor is jumped to */
     scroll-padding-top: 5rem;
-    color-scheme: dark;
   }
 
   body {
-    background-color: var(--color-canvas);
-    color: var(--color-ink);
+    background-color: var(--td-canvas);
+    color: var(--td-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    /* Theme changes should not flash a hard cut */
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease;
+  }
+
+  /*
+    Tailwind's preflight sets `cursor: default` on buttons, which makes every
+    control in the app feel inert. Restoring the pointer centrally means no
+    component has to remember `cursor-pointer`, and disabled controls still
+    read as unavailable.
+  */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="switch"],
+  [role="tab"],
+  [type="button"]:not(:disabled),
+  [type="submit"]:not(:disabled),
+  [type="reset"]:not(:disabled),
+  [type="checkbox"]:not(:disabled),
+  [type="radio"]:not(:disabled),
+  label[for],
+  summary,
+  a[href] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [type="button"]:disabled,
+  [type="submit"]:disabled,
+  [aria-disabled="true"],
+  select:disabled,
+  input:disabled,
+  textarea:disabled {
+    cursor: not-allowed;
+  }
+
+  select:not(:disabled) {
+    cursor: pointer;
   }
 
   /* One consistent, always-visible focus ring across the whole app */
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--td-accent);
     outline-offset: 2px;
     border-radius: 0.375rem;
   }
 
   ::selection {
-    background-color: color-mix(in oklab, var(--color-accent) 30%, transparent);
-    color: var(--color-ink);
+    background-color: color-mix(in oklab, var(--td-accent) 28%, transparent);
+    color: var(--td-ink);
   }
 
   /* Scrollbars that belong to the theme rather than the OS */
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-line-strong) transparent;
+    scrollbar-color: var(--td-line-strong) transparent;
   }
 
   *::-webkit-scrollbar {
@@ -150,14 +330,21 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background-color: var(--color-line-strong);
+    background-color: var(--td-line-strong);
     border-radius: 9999px;
     border: 3px solid transparent;
     background-clip: content-box;
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background-color: var(--color-accent-deep);
+    background-color: var(--td-accent-deep);
+  }
+
+  /* Native form controls should follow the theme */
+  input,
+  textarea,
+  select {
+    accent-color: var(--td-accent);
   }
 }
 
@@ -169,44 +356,45 @@
 @utility bg-blueprint {
   background-image:
     linear-gradient(
-      color-mix(in oklab, var(--color-ink) 50%, transparent) 1px,
+      color-mix(in oklab, var(--td-ink) 45%, transparent) 1px,
       transparent 1px
     ),
     linear-gradient(
       90deg,
-      color-mix(in oklab, var(--color-ink) 50%, transparent) 1px,
+      color-mix(in oklab, var(--td-ink) 45%, transparent) 1px,
       transparent 1px
     );
   background-size: 52px 52px;
 }
 
-/* Elevated glass panel */
+/* Theme-aware backdrop-blur panel */
 @utility panel {
-  border: 1px solid color-mix(in oklab, var(--color-ink) 8%, transparent);
-  background-color: color-mix(in oklab, var(--color-surface) 92%, transparent);
+  border: 1px solid var(--td-line);
+  background-color: color-mix(in oklab, var(--td-surface) 88%, transparent);
   backdrop-filter: blur(12px);
+  box-shadow: 0 18px 48px -24px var(--td-shadow);
 }
 
 /* Cyan text gradient for emphasis inside headlines */
 @utility text-gradient-accent {
   background-image: linear-gradient(
     100deg,
-    var(--color-accent-bright),
-    var(--color-accent) 45%,
-    var(--color-info)
+    var(--td-accent-bright),
+    var(--td-accent) 45%,
+    var(--td-info)
   );
   background-clip: text;
   color: transparent;
 }
 
-/* Thin hairline that fades out at both ends */
+/* Hairline that fades out at both ends */
 @utility rule-fade {
   height: 1px;
   background-image: linear-gradient(
     90deg,
     transparent,
-    var(--color-line-strong) 15%,
-    var(--color-line-strong) 85%,
+    var(--td-line-strong) 15%,
+    var(--td-line-strong) 85%,
     transparent
   );
 }
@@ -217,6 +405,43 @@
   font-size: 0.75rem;
   letter-spacing: 0.02em;
   word-break: break-all;
+}
+
+/* Decorative glow intensity, tuned per theme */
+@utility glow-tint {
+  opacity: var(--td-glow);
+}
+
+@utility grid-tint {
+  opacity: var(--td-grid);
+}
+
+/* Skeleton placeholder with a travelling sheen */
+@utility skeleton {
+  background-color: var(--td-raise-md);
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    var(--td-raise-lg),
+    transparent
+  );
+  background-size: 60% 100%;
+  background-repeat: no-repeat;
+  animation: shimmer 1.6s linear infinite;
+  border-radius: 0.5rem;
+}
+
+/* Lift a card on hover without shifting surrounding layout */
+@utility lift {
+  transition:
+    transform 0.2s var(--ease-out-quart),
+    box-shadow 0.2s var(--ease-out-quart),
+    border-color 0.2s ease;
+}
+
+@utility lift-hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px -18px var(--td-shadow);
 }
 
 /* =========================================================
@@ -242,9 +467,18 @@
 ========================================================= */
 
 @media print {
-  body {
-    background: #fff;
-    color: #000;
+  :root {
+    --td-canvas: #fff;
+    --td-surface: #fff;
+    --td-sunken: #fff;
+    --td-elevated: #fff;
+    --td-ink: #000;
+    --td-ink-soft: #1a1a1a;
+    --td-ink-muted: #333;
+    --td-ink-faint: #555;
+    --td-line: #bbb;
+    --td-raise: transparent;
+    --td-raise-md: transparent;
   }
 
   .no-print {

@@ -61,7 +61,7 @@ export function Tabs({ tabs, value, onChange, className }) {
               "relative flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-medium transition duration-200",
               active
                 ? "bg-accent/10 text-accent"
-                : "text-ink-muted hover:bg-white/5 hover:text-ink-soft",
+                : "text-ink-muted hover:bg-raise-md hover:text-ink-soft",
             )}
           >
             {tab.icon && <Icon name={tab.icon} />}
@@ -72,7 +72,7 @@ export function Tabs({ tabs, value, onChange, className }) {
               <span
                 className={cn(
                   "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
-                  active ? "bg-accent/15 text-accent" : "bg-white/5 text-ink-faint",
+                  active ? "bg-accent/15 text-accent" : "bg-raise-md text-ink-faint",
                 )}
               >
                 {tab.count}
@@ -106,7 +106,7 @@ export function FilterPills({ options, value, onChange, className }) {
               "rounded-lg px-3 py-2 text-xs font-medium transition duration-200",
               active
                 ? "bg-accent/10 text-accent ring-1 ring-accent/25"
-                : "text-ink-muted hover:bg-white/5 hover:text-ink-soft",
+                : "text-ink-muted hover:bg-raise-md hover:text-ink-soft",
             )}
           >
             {option.label}
@@ -200,7 +200,7 @@ export function Toggle({ checked, onChange, label, description, className }) {
         onClick={() => onChange(!checked)}
         className={cn(
           "relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition duration-200",
-          checked ? "bg-accent" : "bg-white/10",
+          checked ? "bg-accent" : "bg-raise-lg",
         )}
       >
         <span
@@ -244,7 +244,7 @@ export function CopyButton({ value, label = "Copy value", className }) {
         "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded transition duration-200",
         copied
           ? "text-safe"
-          : "text-ink-faint hover:bg-white/5 hover:text-accent",
+          : "text-ink-faint hover:bg-raise-md hover:text-accent",
         className,
       )}
     >
@@ -258,7 +258,7 @@ export function IndicatorRow({ indicator, verdictTone, className }) {
   return (
     <div
       className={cn(
-        "flex items-center gap-3 rounded-lg border border-line bg-white/[0.02] px-3 py-2.5 transition duration-200 hover:border-accent/25",
+        "flex items-center gap-3 rounded-lg border border-line bg-raise px-3 py-2.5 transition duration-200 hover:border-accent/25",
         className,
       )}
     >

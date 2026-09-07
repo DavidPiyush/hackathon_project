@@ -52,7 +52,7 @@ export function AuthenticationPanel({ authentication, className }) {
           return (
             <li
               key={row.key}
-              className="rounded-lg border border-line bg-white/[0.02] p-3"
+              className="rounded-lg border border-line bg-raise p-3"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -200,7 +200,7 @@ export function FindingsPanel({ findings = [], className }) {
             <li
               key={finding.text}
               className={cn(
-                "flex items-start gap-3 rounded-lg border bg-white/[0.02] p-3",
+                "flex items-start gap-3 rounded-lg border bg-raise p-3",
                 t.border,
               )}
             >
@@ -254,7 +254,7 @@ export function AttachmentPanel({ attachments = [], className }) {
             <li
               key={file.name}
               className={cn(
-                "flex items-center gap-3 rounded-lg border bg-white/[0.02] p-3",
+                "flex items-center gap-3 rounded-lg border bg-raise p-3",
                 t.border,
               )}
             >

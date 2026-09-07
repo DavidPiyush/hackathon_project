@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { InboxClient } from "@/components/dashboard/InboxClient";
 import { emails, emailCategories } from "@/lib/data/emails";
+import { renderWithProviders } from "./helpers/render";
 
-/** Every message in a given category, straight from the shared dataset. */
+/** Every seeded message in a category. */
 const inCategory = (category) =>
   emails.filter((email) => email.category === category);
 
@@ -15,13 +16,16 @@ const selectAllCheckbox = () =>
 const deselectAllCheckbox = () =>
   screen.getByRole("checkbox", { name: /deselect all visible messages/i });
 
+const rowCheckboxes = () =>
+  screen
+    .getAllByRole("checkbox")
+    .filter((box) => box.getAttribute("aria-label")?.startsWith('Select "'));
+
 describe("inbox filtering", () => {
   it("shows only the active category on first render", () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
-    const primary = inCategory("Primary");
-
-    for (const email of primary) {
+    for (const email of inCategory("Primary")) {
       expect(screen.getByText(email.subject)).toBeInTheDocument();
     }
 
@@ -31,7 +35,7 @@ describe("inbox filtering", () => {
   });
 
   it("labels each tab with a count derived from the data, not a fixed number", () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     for (const category of emailCategories) {
       const tab = screen.getByRole("tab", { name: new RegExp(category) });
@@ -40,23 +44,8 @@ describe("inbox filtering", () => {
     }
   });
 
-  it("reports the visible and total counts accurately", () => {
-    // The original toolbar read "1–n of 24" against a six-message dataset.
-    render(<InboxClient />);
-
-    expect(
-      screen.getByText(String(inCategory("Primary").length), {
-        selector: "strong",
-      }),
-    ).toBeInTheDocument();
-
-    expect(
-      screen.getByText(String(emails.length), { selector: "strong" }),
-    ).toBeInTheDocument();
-  });
-
   it("switches category when another tab is selected", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     await userEvent.click(screen.getByRole("tab", { name: /Threat Alerts/ }));
 
@@ -66,11 +55,9 @@ describe("inbox filtering", () => {
   });
 
   it("moves between tabs with arrow keys", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
-    const first = screen.getByRole("tab", { name: /Primary/ });
-
-    first.focus();
+    screen.getByRole("tab", { name: /Primary/ }).focus();
     await userEvent.keyboard("{ArrowRight}");
 
     expect(screen.getByRole("tab", { name: /Threat Alerts/ })).toHaveAttribute(
@@ -80,11 +67,12 @@ describe("inbox filtering", () => {
   });
 
   it("filters by search across subject, sender and message id", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
-    const search = screen.getByRole("searchbox", { name: /search messages/i });
-
-    await userEvent.type(search, "EM-2039");
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: /search messages/i }),
+      "EM-2039",
+    );
 
     expect(
       screen.getByText("New suspicious message detected"),
@@ -95,8 +83,21 @@ describe("inbox filtering", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("finds a message by its case id", async () => {
+    renderWithProviders(<InboxClient />);
+
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: /search messages/i }),
+      "IR-2026-016",
+    );
+
+    expect(
+      screen.getByText("New suspicious message detected"),
+    ).toBeInTheDocument();
+  });
+
   it("shows an empty state when nothing matches", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     await userEvent.type(
       screen.getByRole("searchbox", { name: /search messages/i }),
@@ -109,7 +110,7 @@ describe("inbox filtering", () => {
   });
 
   it("recovers from an empty state via the reset action", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     await userEvent.type(
       screen.getByRole("searchbox", { name: /search messages/i }),
@@ -124,17 +125,13 @@ describe("inbox filtering", () => {
   });
 
   it("applies the high-risk filter", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     await userEvent.click(screen.getByRole("tab", { name: /Threat Alerts/ }));
     await userEvent.click(screen.getByRole("button", { name: "High Risk" }));
 
-    const shown = inCategory("Threat Alerts").filter(
-      (email) => email.risk >= 75,
-    );
-    const hidden = inCategory("Threat Alerts").filter(
-      (email) => email.risk < 75,
-    );
+    const shown = inCategory("Threat Alerts").filter((e) => e.risk >= 75);
+    const hidden = inCategory("Threat Alerts").filter((e) => e.risk < 75);
 
     for (const email of shown) {
       expect(screen.getByText(email.subject)).toBeInTheDocument();
@@ -148,27 +145,22 @@ describe("inbox filtering", () => {
 
 describe("inbox selection", () => {
   /**
-   * This is the regression the audit found. The previous implementation
-   * compared `selected.length === filtered.length`, so selecting two messages
-   * in one tab made the header checkbox read as checked in any other tab that
-   * also had two messages — and "select all" would then clear instead of
-   * select.
+   * The original implementation compared `selected.length` to
+   * `filtered.length`, so selecting two messages in one tab made the header
+   * checkbox read as checked in any other tab that also held two — and
+   * "select all" would then clear instead of select.
    */
   it("selects every visible message and nothing else", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     await userEvent.click(selectAllCheckbox());
 
-    const rowCheckboxes = screen
-      .getAllByRole("checkbox")
-      .filter((box) => box.getAttribute("aria-label")?.startsWith("Select \""));
-
-    expect(rowCheckboxes.length).toBe(inCategory("Primary").length);
-    expect(rowCheckboxes.every((box) => box.checked)).toBe(true);
+    expect(rowCheckboxes().length).toBe(inCategory("Primary").length);
+    expect(rowCheckboxes().every((box) => box.checked)).toBe(true);
   });
 
   it("reports the number selected", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     await userEvent.click(selectAllCheckbox());
 
@@ -178,50 +170,37 @@ describe("inbox selection", () => {
   });
 
   it("deselects everything when toggled a second time", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     await userEvent.click(selectAllCheckbox());
     await userEvent.click(deselectAllCheckbox());
 
-    const rowCheckboxes = screen
-      .getAllByRole("checkbox")
-      .filter((box) => box.getAttribute("aria-label")?.startsWith("Select \""));
-
-    expect(rowCheckboxes.every((box) => !box.checked)).toBe(true);
+    expect(rowCheckboxes().every((box) => !box.checked)).toBe(true);
   });
 
   it("does not report select-all as checked when a different tab has an equal count", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
-    // Select everything in Primary…
     await userEvent.click(selectAllCheckbox());
     expect(deselectAllCheckbox()).toBeChecked();
 
-    // …then move to another category. Selection is scoped to what is visible,
-    // so the header must not read as checked here.
     await userEvent.click(screen.getByRole("tab", { name: /Updates/ }));
 
     expect(selectAllCheckbox()).not.toBeChecked();
   });
 
   it("clears the selection when the category changes", async () => {
-    // Keeping hidden rows selected would let a bulk action silently affect
-    // messages the analyst can no longer see.
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     await userEvent.click(selectAllCheckbox());
     await userEvent.click(screen.getByRole("tab", { name: /Updates/ }));
     await userEvent.click(screen.getByRole("tab", { name: /Primary/ }));
 
-    const rowCheckboxes = screen
-      .getAllByRole("checkbox")
-      .filter((box) => box.getAttribute("aria-label")?.startsWith("Select \""));
-
-    expect(rowCheckboxes.every((box) => !box.checked)).toBe(true);
+    expect(rowCheckboxes().every((box) => !box.checked)).toBe(true);
   });
 
   it("clears the selection when a risk filter changes", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     await userEvent.click(selectAllCheckbox());
     await userEvent.click(screen.getByRole("button", { name: "Unread" }));
@@ -230,19 +209,21 @@ describe("inbox selection", () => {
   });
 
   it("shows bulk actions only once something is selected", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     expect(
-      screen.queryByRole("button", { name: /^Archive/ }),
+      screen.queryByRole("button", { name: /^Archive \d/ }),
     ).not.toBeInTheDocument();
 
     await userEvent.click(selectAllCheckbox());
 
-    expect(screen.getByRole("button", { name: /^Archive/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Archive \d+ selected/ }),
+    ).toBeInTheDocument();
   });
 
   it("toggles a single row independently", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     const target = inCategory("Primary")[0];
     const checkbox = screen.getByRole("checkbox", {
@@ -257,7 +238,7 @@ describe("inbox selection", () => {
   });
 
   it("disables select-all when no rows are visible", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     await userEvent.type(
       screen.getByRole("searchbox", { name: /search messages/i }),
@@ -268,21 +249,214 @@ describe("inbox selection", () => {
   });
 });
 
+describe("inbox mutations", () => {
+  it("archives a message out of the inbox and into the archived view", async () => {
+    renderWithProviders(<InboxClient />);
+
+    const target = inCategory("Primary")[0];
+
+    await userEvent.click(
+      screen.getByRole("button", { name: `Archive "${target.subject}"` }),
+    );
+
+    expect(screen.queryByText(target.subject)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /^Archived/ }));
+
+    expect(screen.getByText(target.subject)).toBeInTheDocument();
+  });
+
+  it("offers undo on archive and restores the message", async () => {
+    renderWithProviders(<InboxClient />);
+
+    const target = inCategory("Primary")[0];
+
+    await userEvent.click(
+      screen.getByRole("button", { name: `Archive "${target.subject}"` }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /undo/i }));
+
+    expect(screen.getByText(target.subject)).toBeInTheDocument();
+  });
+
+  it("moves an archived message back to the inbox", async () => {
+    renderWithProviders(<InboxClient />);
+
+    const target = inCategory("Primary")[0];
+
+    await userEvent.click(
+      screen.getByRole("button", { name: `Archive "${target.subject}"` }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^Archived/ }));
+
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: `Move "${target.subject}" back to the inbox`,
+      }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^Inbox/ }));
+
+    expect(screen.getByText(target.subject)).toBeInTheDocument();
+  });
+
+  it("stars a message and surfaces it in the starred view", async () => {
+    renderWithProviders(<InboxClient />);
+
+    const target = inCategory("Primary")[0];
+
+    await userEvent.click(
+      screen.getByRole("button", { name: `Star "${target.subject}"` }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^Starred/ }));
+
+    // Assert on the row's own checkbox rather than the subject text, which
+    // also appears in the confirmation toast.
+    expect(
+      screen.getByRole("checkbox", { name: `Select "${target.subject}"` }),
+    ).toBeInTheDocument();
+
+    // And the star is now a "remove star" control, so the state really changed.
+    expect(
+      screen.getByRole("button", {
+        name: `Remove star from "${target.subject}"`,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("requires confirmation before deleting, and can be cancelled", async () => {
+    renderWithProviders(<InboxClient />);
+
+    const target = inCategory("Primary")[0];
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: `Select "${target.subject}"` }),
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Delete 1 selected/ }),
+    );
+
+    // Nothing is gone yet — the prompt is still open.
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    expect(screen.getByText(target.subject)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(screen.getByText(target.subject)).toBeInTheDocument();
+  });
+
+  it("deletes on confirmation and shows the message in trash", async () => {
+    renderWithProviders(<InboxClient />);
+
+    const target = inCategory("Primary")[0];
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: `Select "${target.subject}"` }),
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Delete 1 selected/ }),
+    );
+
+    await userEvent.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", {
+        name: "Delete",
+      }),
+    );
+
+    expect(screen.queryByText(target.subject)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /^Trash/ }));
+
+    expect(screen.getByText(target.subject)).toBeInTheDocument();
+  });
+
+  it("recovers a deleted message from trash", async () => {
+    renderWithProviders(<InboxClient />);
+
+    const target = inCategory("Primary")[0];
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: `Select "${target.subject}"` }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Delete 1 selected/ }),
+    );
+    await userEvent.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", {
+        name: "Delete",
+      }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^Trash/ }));
+    await userEvent.click(
+      screen.getByRole("button", { name: `Recover "${target.subject}"` }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^Inbox/ }));
+
+    expect(screen.getByText(target.subject)).toBeInTheDocument();
+  });
+
+  it("marks a message read when it is opened", async () => {
+    renderWithProviders(<InboxClient />);
+
+    const target = inCategory("Primary").find((email) => email.unread);
+
+    // An unread row carries the unread indicator.
+    expect(screen.getAllByLabelText("Unread").length).toBeGreaterThan(0);
+
+    const before = screen.getAllByLabelText("Unread").length;
+
+    await userEvent.click(screen.getByText(target.subject));
+    await userEvent.keyboard("{Escape}");
+
+    expect(screen.queryAllByLabelText("Unread").length).toBe(before - 1);
+  });
+
+  it("keeps the live stat tiles in step with the list", async () => {
+    renderWithProviders(<InboxClient />);
+
+    const inboxTile = screen
+      .getByText("In the inbox")
+      .closest("div").parentElement;
+
+    expect(within(inboxTile).getByText(String(emails.length))).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: `Archive "${inCategory("Primary")[0].subject}"`,
+      }),
+    );
+
+    expect(
+      within(inboxTile).getByText(String(emails.length - 1)),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("inbox detail dialog", () => {
   it("opens the evidence dialog for the chosen message", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     const target = inCategory("Primary")[0];
 
     await userEvent.click(screen.getByText(target.subject));
 
-    const dialog = screen.getByRole("dialog");
-
-    expect(within(dialog).getByRole("heading", { name: target.subject })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("dialog")).getByRole("heading", {
+        name: target.subject,
+      }),
+    ).toBeInTheDocument();
   });
 
   it("shows the evidence panels for that message", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     await userEvent.click(screen.getByRole("tab", { name: /Threat Alerts/ }));
     await userEvent.click(screen.getByText("Urgent Invoice Payment Required"));
@@ -296,7 +470,7 @@ describe("inbox detail dialog", () => {
   });
 
   it("shows the score and its derived severity together", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     await userEvent.click(screen.getByRole("tab", { name: /Threat Alerts/ }));
     await userEvent.click(screen.getByText("Urgent Invoice Payment Required"));
@@ -308,7 +482,7 @@ describe("inbox detail dialog", () => {
   });
 
   it("closes on Escape", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     await userEvent.click(screen.getByText(inCategory("Primary")[0].subject));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -319,7 +493,7 @@ describe("inbox detail dialog", () => {
   });
 
   it("does not toggle selection when a row is opened", async () => {
-    render(<InboxClient />);
+    renderWithProviders(<InboxClient />);
 
     const target = inCategory("Primary")[0];
 

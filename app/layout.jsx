@@ -1,6 +1,10 @@
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { site } from "@/lib/data/site";
+import {
+  ThemeProvider,
+  ThemeScript,
+} from "@/components/providers/ThemeProvider";
 
 import "./globals.css";
 
@@ -54,8 +58,13 @@ export const metadata = {
 };
 
 export const viewport = {
-  themeColor: "#050b14",
-  colorScheme: "dark",
+  // One entry per theme, so the browser chrome matches the active palette
+  // instead of always painting the dark surface colour.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f7fa" },
+    { media: "(prefers-color-scheme: dark)", color: "#050b14" },
+  ],
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({ children }) {
@@ -66,8 +75,15 @@ export default function RootLayout({ children }) {
       // smooth scrolling during route transitions, which Next 16 no longer
       // does by default. Without it, every navigation animates its scroll.
       data-scroll-behavior="smooth"
+      // ThemeScript stamps data-theme before paint, so the server HTML and the
+      // first client render legitimately differ on this attribute.
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable}`}
     >
+      <head>
+        <ThemeScript />
+      </head>
+
       <body className="min-h-dvh">
         {/* Keyboard users can jump straight past the nav on any page. */}
         <a
@@ -77,7 +93,7 @@ export default function RootLayout({ children }) {
           Skip to main content
         </a>
 
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

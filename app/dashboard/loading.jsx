@@ -8,9 +8,9 @@ export default function DashboardLoading() {
   return (
     <div className="animate-pulse">
       <div className="border-b border-line bg-surface/40 px-6 py-8 lg:px-8">
-        <div className="h-3 w-28 rounded bg-white/5" />
-        <div className="mt-4 h-8 w-64 rounded bg-white/[0.07]" />
-        <div className="mt-4 h-4 w-full max-w-xl rounded bg-white/5" />
+        <div className="h-3 w-28 rounded bg-raise-md" />
+        <div className="mt-4 h-8 w-64 rounded bg-raise-lg" />
+        <div className="mt-4 h-4 w-full max-w-xl rounded bg-raise-md" />
       </div>
 
       <div className="space-y-6 px-6 py-8 lg:px-8">
