@@ -1,28 +1,32 @@
-/* eslint-disable @next/next/no-html-link-for-pages */
 "use client";
 
+import { useState } from "react";
 import {
   FaShieldHalved,
   FaHouse,
-  FaMagnifyingGlass,
-  FaGlobe,
-  FaNetworkWired,
+  FaPuzzlePiece,
+  FaCircleInfo,
   FaEnvelope,
-  FaChartLine,
   FaBars,
   FaXmark,
 } from "react-icons/fa6";
 
-import { useState } from "react";
-
 export default function Header() {
   const [mobileMenu, setMobileMenu] = useState(false);
+
+  const closeMobileMenu = () => {
+    setMobileMenu(false);
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#050b14]/95 text-gray-400 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 lg:px-8">
-       
-        <a href="/" className="flex items-center gap-3">
+        {/* Logo */}
+        <a
+          href="#home"
+          onClick={closeMobileMenu}
+          className="flex items-center gap-3"
+        >
           <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/10">
             <FaShieldHalved className="text-lg text-cyan-400" />
           </div>
@@ -38,44 +42,49 @@ export default function Header() {
 
         {/* Desktop Navigation */}
         <nav className="hidden items-center gap-1 md:flex">
+          {/* Home */}
           <a
-            href="/"
+            href="#home"
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:bg-white/5 hover:text-cyan-400"
           >
             <FaHouse className="text-xs" />
             Home
           </a>
 
+          {/* Features */}
           <a
-            href="/analysis"
+            href="#features"
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:bg-white/5 hover:text-cyan-400"
           >
-            <FaMagnifyingGlass className="text-xs" />
-            Analysis
+            <FaPuzzlePiece className="text-xs" />
+            Features
           </a>
 
+          {/* How It Works */}
           <a
-            href="/geoip"
+            href="#how-it-works"
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:bg-white/5 hover:text-cyan-400"
           >
-            <FaGlobe className="text-xs" />
-            GeoIP
+            <FaShieldHalved className="text-xs" />
+            How It Works
           </a>
 
+          {/* About */}
           <a
-            href="/threat-intelligence"
+            href="#about"
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:bg-white/5 hover:text-cyan-400"
           >
-            <FaNetworkWired className="text-xs" />
-            Threat Intel
+            <FaCircleInfo className="text-xs" />
+            About
           </a>
 
+          {/* Contact */}
           <a
-            href="/reports"
+            href="#contact"
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:bg-white/5 hover:text-cyan-400"
           >
-            <FaChartLine className="text-xs" />
-            Reports
+            <FaEnvelope className="text-xs" />
+            Contact
           </a>
         </nav>
 
@@ -84,16 +93,16 @@ export default function Header() {
           {/* Status */}
           <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-xs">
             <span className="h-2 w-2 rounded-full bg-emerald-400" />
+
             <span className="text-gray-400">Operational</span>
           </div>
 
-          {/* Contact */}
+          {/* Get Started */}
           <a
-            href="mailto:contact@example.com"
-            className="flex items-center gap-2 rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-sm text-cyan-400 transition hover:bg-cyan-400/20"
+            href="#contact"
+            className="rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-sm text-cyan-400 transition hover:bg-cyan-400/20"
           >
-            <FaEnvelope className="text-xs" />
-            Contact
+            Get Started
           </a>
         </div>
 
@@ -102,6 +111,7 @@ export default function Header() {
           onClick={() => setMobileMenu(!mobileMenu)}
           className="rounded-lg border border-white/10 p-2 text-gray-400 transition hover:text-cyan-400 md:hidden"
           aria-label="Toggle navigation"
+          aria-expanded={mobileMenu}
         >
           {mobileMenu ? <FaXmark /> : <FaBars />}
         </button>
@@ -111,52 +121,63 @@ export default function Header() {
       {mobileMenu && (
         <nav className="border-t border-white/10 bg-[#050b14] px-6 py-4 md:hidden">
           <div className="flex flex-col gap-1">
+            {/* Home */}
             <a
-              href="/"
-              className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm hover:bg-white/5 hover:text-cyan-400"
+              href="#home"
+              onClick={closeMobileMenu}
+              className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition hover:bg-white/5 hover:text-cyan-400"
             >
               <FaHouse />
               Home
             </a>
 
+            {/* Features */}
             <a
-              href="/analysis"
-              className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm hover:bg-white/5 hover:text-cyan-400"
+              href="#features"
+              onClick={closeMobileMenu}
+              className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition hover:bg-white/5 hover:text-cyan-400"
             >
-              <FaMagnifyingGlass />
-              Analysis
+              <FaPuzzlePiece />
+              Features
             </a>
 
+            {/* How It Works */}
             <a
-              href="/geoip"
-              className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm hover:bg-white/5 hover:text-cyan-400"
+              href="#how-it-works"
+              onClick={closeMobileMenu}
+              className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition hover:bg-white/5 hover:text-cyan-400"
             >
-              <FaGlobe />
-              GeoIP
+              <FaShieldHalved />
+              How It Works
             </a>
 
+            {/* About */}
             <a
-              href="/threat-intelligence"
-              className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm hover:bg-white/5 hover:text-cyan-400"
+              href="#about"
+              onClick={closeMobileMenu}
+              className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition hover:bg-white/5 hover:text-cyan-400"
             >
-              <FaNetworkWired />
-              Threat Intelligence
+              <FaCircleInfo />
+              About
             </a>
 
+            {/* Contact */}
             <a
-              href="/reports"
-              className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm hover:bg-white/5 hover:text-cyan-400"
-            >
-              <FaChartLine />
-              Reports
-            </a>
-
-            <a
-              href="mailto:contact@example.com"
-              className="mt-2 flex items-center gap-3 rounded-lg bg-cyan-400/10 px-3 py-3 text-sm text-cyan-400"
+              href="#contact"
+              onClick={closeMobileMenu}
+              className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition hover:bg-white/5 hover:text-cyan-400"
             >
               <FaEnvelope />
-              Contact
+              Contact Us
+            </a>
+
+            {/* Get Started */}
+            <a
+              href="#contact"
+              onClick={closeMobileMenu}
+              className="mt-2 rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-3 text-center text-sm font-medium text-cyan-400 transition hover:bg-cyan-400/20"
+            >
+              Get Started
             </a>
           </div>
         </nav>

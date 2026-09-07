@@ -14,7 +14,7 @@ import {
 
 export default function Contact() {
   return (
-    <main className="min-h-screen bg-[#050b14] text-white">
+    <main className="min-h-screen bg-[#050b14] text-white" id="contact">
 
       {/* =========================
           HERO
