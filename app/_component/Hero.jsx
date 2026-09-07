@@ -11,7 +11,7 @@ import {
 
 export default function Hero() {
   return (
-    <section className="relative overflow-hidden bg-[#050b14] text-white" id='/'>
+    <section className="relative overflow-hidden bg-[#050b14] text-white" id='home'>
 
       {/* Background Glow */}
       <div className="pointer-events-none absolute inset-0">
