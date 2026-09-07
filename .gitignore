@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but the template is committed: it documents what a deployment needs and
+# contains no secrets.
+!.env.example
 
 # vercel
 .vercel

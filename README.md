@@ -4,8 +4,8 @@ An AI-assisted **email threat detection and forensic intelligence** platform. It
 messages, reconstructs the technical evidence behind them, correlates indicators across cases, and
 produces defensible investigation reports.
 
-Built with Next.js 16 (App Router), React 19 and Tailwind CSS v4. **Light and dark themes**, full
-CRUD across every console module, and 354 tests.
+Built with Next.js 16 (App Router), React 19 and Tailwind CSS v4. **Real authentication**, light
+and dark themes, full CRUD across every console module, and 470 tests.
 
 ---
 
@@ -13,7 +13,18 @@ CRUD across every console module, and 354 tests.
 
 ```bash
 npm install
-npm run dev          # http://localhost:3000
+cp .env.example .env.local   # optional in dev, required in production
+npm run dev                  # http://localhost:3000
+```
+
+### Signing in
+
+The console is behind authentication. Either create an account at `/signup`, or use the seeded
+demo credentials shown on the sign-in page:
+
+```
+analyst@threatdetect.com
+evidence-first-2026
 ```
 
 | Script               | What it does                               |
@@ -34,6 +45,24 @@ There is **no backend**, so it is worth being precise about which parts do real 
 
 ### Real, working functionality
 
+- **Authentication.** Real, not a mock:
+  - Passwords hashed with **scrypt** (`node:crypto`, memory-hard, N=32768) with a per-account salt
+    and a **timing-safe** comparison. The stored format is self-describing, so cost parameters can be
+    raised later without invalidating existing hashes.
+  - Sessions are **signed JWTs** (`jose`, HS256, pinned algorithm) in an **httpOnly, SameSite=Lax**
+    cookie, `Secure` in production. The payload carries only id, role and display name — a JWT is
+    signed, not encrypted.
+  - **Layered route protection**: `proxy.js` does a cheap cookie check to keep signed-out users off
+    console URLs, and `lib/auth/dal.js` runs the authoritative check inside every page. A layout
+    check alone is not sufficient — layouts do not re-render on navigation and do not stop nested
+    segments from rendering.
+  - **Login does not leak which emails are registered**: one message for both a wrong password and
+    an unknown account, and an unknown email still runs a hash comparison so the two cases take the
+    same time.
+  - **Throttling** per email *and* client address, so one attacker cannot lock a real user out.
+  - `?next=` is validated server-side, so it cannot become an open redirect.
+  - Password policy follows **NIST SP 800-63B**: a length floor, a blocklist of what attacks
+    actually try, and rejection of sequences or the user's own name — no forced character classes.
 - **Email header analyzer** (`/dashboard/analysis`) — paste raw RFC 5322 headers and it unfolds
   them, reconstructs the `Received` routing path origin-first, reads SPF/DKIM/DMARC and alignment,
   extracts indicators, and produces a scored assessment with every contributing signal listed. It
@@ -70,6 +99,7 @@ API contract; those endpoints are not deployed.
 app/                        Routes only — thin, mostly server components
   layout.jsx                Fonts, metadata, theme script, skip link
   page.jsx                  Landing page
+  (auth)/                   /login and /signup — route group, adds no URL segment
   dashboard/                Console shell + 9 pages
   docs/ security/ privacy/  Content pages
   sitemap.js robots.js      Public routes only, and consistent with each other
@@ -82,10 +112,13 @@ components/
   dashboard/                Console shell, evidence panels, CRUD islands
 
 lib/
+  auth/                     password, session, users, dal, rate-limit, validation
   data/                     Pure seed data — no UI imports
   store/                    Reducer, selectors, theme store
   utils/                    Risk scale, header parser, tones, formatting
   actions/                  Server Actions
+
+proxy.js                    Optimistic auth gate (Middleware was renamed in Next 16)
 
 __tests__/                  Vitest + React Testing Library
 ```
@@ -103,6 +136,23 @@ follows the OS while set to `system`, and syncs across tabs.
 Components never hold a hex value — they take a semantic `tone` and resolve it through
 `lib/utils/tones.js`. The **risk scale** in `lib/utils/risk.js` is the spine: a 0–100 score maps to
 exactly one severity band, and every badge, meter, border and label derives from it.
+
+### Authentication
+
+```
+proxy.js            optimistic  — cookie check only, runs on every request
+lib/auth/dal.js     authoritative — memoised with React cache(), called by every page
+```
+
+The user store (`lib/auth/users.js`) is **the one part that is not production-ready**, and the
+comment at the top of that file says so. Records live in a module-level `Map`, so accounts are lost
+on restart and are not shared between instances. Everything around it is real. The interface is
+deliberately the shape a database adapter would have — `findByEmail`, `findById`, `createUser`,
+`verifyCredentials` — so swapping in Postgres is a change to that file alone.
+
+`SESSION_SECRET` is **required in production**. Without it the app throws with an actionable
+message rather than signing sessions with a value that is public in this repository — and rather
+than failing closed on every request, which would present as "login is broken".
 
 ### Single sources of truth
 
@@ -123,7 +173,7 @@ Four choke points, each closing a class of bug:
 npm test
 ```
 
-**354 tests across 12 files.** Beyond ordinary coverage, the suite pins the specific defects this
+**470 tests across 15 files.** Beyond ordinary coverage, the suite pins the specific defects this
 codebase was rebuilt to fix, and the ones found while rebuilding it:
 
 - **`routes.test.js`** walks the real `app/` directory and asserts every internal `href` — in the
@@ -142,6 +192,14 @@ codebase was rebuilt to fix, and the ones found while rebuilding it:
   meant **typing into any dialog form lost focus after the first character**.
 - **`inbox.test.jsx`** covers the select-all regression (compared by id, not count) and the full
   archive → undo → restore → delete → recover cycle.
+- **`auth-crypto.test.js`** covers hashing (salting, timing-safe verify, failing closed on a
+  malformed hash), the password policy, and throttling.
+- **`auth-session.test.js`** mocks `next/headers` and `next/navigation` to drive the real Server
+  Actions. It covers cookie attributes, the `alg: none` JWT bypass, payload tampering, the
+  enumeration-timing equalisation, open-redirect rejection, lockout, and the missing-secret failure
+  mode.
+- **`auth-forms.test.jsx`** covers labels, autocomplete hints, the reveal toggle, and the live
+  strength meter.
 - **`parse-headers.test.js`** covers folded headers, CRLF, malformed input and out-of-range IPs.
 
 ---
@@ -197,3 +255,9 @@ Stated here for the same reason the product states them in its own UI:
   *that domain*. It says nothing about whether the domain is trustworthy.
 - Console state persists to **this browser only**. There is no server to sync to, and
   Settings → *Reset the console* clears it.
+- **Accounts live in server memory.** They are lost on restart and not shared between instances.
+  Do not reuse a real password; the sign-in screen says so.
+- There is **no password reset**, because there is no mail service. The link is deliberately inert
+  rather than a dead end that looks like it works.
+- Sessions are stateless, so a single session cannot be revoked server-side before it expires —
+  the usual trade-off for not keeping a session table.

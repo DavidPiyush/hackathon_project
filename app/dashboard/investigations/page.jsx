@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/auth/dal";
 import { Button } from "@/components/ui/Button";
 import { PageHeader, PageBody } from "@/components/dashboard/PageHeader";
 import { InvestigationsClient } from "@/components/dashboard/InvestigationsClient";
@@ -15,7 +16,11 @@ export const metadata = {
  * from live store state, because assigning a message to a case has to update
  * both the case row and the stat tiles at once.
  */
-export default function InvestigationsPage() {
+export default async function InvestigationsPage() {
+  // Authoritative check. Proxy is optimistic; this is what actually gates
+  // the page, per the Next.js auth guidance on layouts.
+  await requireUser("/dashboard/investigations");
+
   return (
     <>
       <PageHeader

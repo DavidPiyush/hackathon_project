@@ -78,12 +78,19 @@ describe("SiteHeader", () => {
     }
   });
 
-  it("links to the console", () => {
+  it("offers sign-in and sign-up, not a direct console link", () => {
+    // The console is behind auth now, so linking straight into it would send
+    // a signed-out visitor to a redirect.
     renderPage(<SiteHeader />);
 
+    expect(screen.getAllByRole("link", { name: /Sign in/ })[0]).toHaveAttribute(
+      "href",
+      "/login",
+    );
+
     expect(
-      screen.getAllByRole("link", { name: /Open Console/ })[0],
-    ).toHaveAttribute("href", "/dashboard");
+      screen.getAllByRole("link", { name: /Get started/ })[0],
+    ).toHaveAttribute("href", "/signup");
   });
 
   it("offers the theme switch without opening any menu", () => {

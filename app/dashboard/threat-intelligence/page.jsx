@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/auth/dal";
 import { cn } from "@/lib/utils/cn";
 import { tone as resolveTone } from "@/lib/utils/tones";
 import { campaigns } from "@/lib/data/dashboard";
@@ -19,7 +20,11 @@ export const metadata = {
     "Indicator registry, infrastructure context and campaign clusters correlated across investigations.",
 };
 
-export default function ThreatIntelligencePage() {
+export default async function ThreatIntelligencePage() {
+  // Authoritative check. Proxy is optimistic; this is what actually gates
+  // the page, per the Next.js auth guidance on layouts.
+  await requireUser("/dashboard/threat-intelligence");
+
   return (
     <>
       <PageHeader

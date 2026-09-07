@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/auth/dal";
 import { Button } from "@/components/ui/Button";
 import { PageHeader, PageBody } from "@/components/dashboard/PageHeader";
 import { OverviewClient } from "@/components/dashboard/OverviewClient";
@@ -8,7 +9,11 @@ export const metadata = {
     "Platform health, detection volume and threat activity across the last seven days.",
 };
 
-export default function DashboardOverviewPage() {
+export default async function DashboardOverviewPage() {
+  // Authoritative check. Proxy is optimistic; this is what actually gates
+  // the page, per the Next.js auth guidance on layouts.
+  await requireUser("/dashboard");
+
   return (
     <>
       <PageHeader

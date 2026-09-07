@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -99,8 +99,17 @@ describe("app router routes", () => {
         "/docs/api",
         "/security",
         "/privacy",
+        // Auth screens live in an (auth) route group, which adds no segment.
+        "/login",
+        "/signup",
       ]),
     );
+  });
+
+  it("does not leak the route group name into a URL", () => {
+    for (const route of ROUTES) {
+      expect(route).not.toContain("(");
+    }
   });
 
   it("uses only lowercase route segments", () => {
@@ -239,5 +248,79 @@ describe("icon references resolve", () => {
     for (const [name, glyph] of Object.entries(icons)) {
       expect(glyph, `icon "${name}" resolved to undefined`).toBeTruthy();
     }
+  });
+});
+
+describe("route protection", () => {
+  const proxy = readFileSync(join(process.cwd(), "proxy.js"), "utf8");
+
+  /**
+   * The proxy is an optimistic gate; the DAL is authoritative. Both must be
+   * present, because either one alone leaves a hole the Next.js auth guidance
+   * warns about.
+   */
+  it("guards the console in the proxy", () => {
+    expect(proxy).toContain("/dashboard");
+    expect(proxy).toMatch(/redirect/);
+    // It must read the cookie only — no data access on every request.
+    expect(proxy).toContain("decryptSession");
+  });
+
+  it("uses the Next 16 proxy convention, not the deprecated middleware name", () => {
+    expect(proxy).toMatch(/export (async )?function proxy/);
+    expect(proxy).not.toMatch(/export (async )?function middleware/);
+  });
+
+  it("has no middleware.js left behind", () => {
+    // Both files present would mean two conflicting gates.
+    expect(existsSync(join(process.cwd(), "middleware.js"))).toBe(false);
+    expect(existsSync(join(process.cwd(), "middleware.ts"))).toBe(false);
+  });
+
+  it("bounces signed-in users away from the auth screens", () => {
+    expect(proxy).toContain("AUTH_ROUTES");
+  });
+
+  it("checks the session in every console page, not only the layout", () => {
+    // A layout check is not sufficient: layouts do not re-render on
+    // navigation and do not stop nested segments from rendering.
+    const pages = sourceFiles(join(APP_DIR, "dashboard")).filter((file) =>
+      /page\.jsx?$/.test(file),
+    );
+
+    expect(pages.length).toBeGreaterThan(0);
+
+    for (const file of pages) {
+      const source = readFileSync(file, "utf8");
+
+      expect(
+        source,
+        `${relative(process.cwd(), file)} does not call requireUser()`,
+      ).toContain("requireUser(");
+    }
+  });
+
+  it("passes a real path to requireUser, not a mangled one", () => {
+    const pages = sourceFiles(join(APP_DIR, "dashboard")).filter((file) =>
+      /page\.jsx?$/.test(file),
+    );
+
+    for (const file of pages) {
+      const source = readFileSync(file, "utf8");
+
+      for (const match of source.matchAll(/requireUser\("([^"]*)"\)/g)) {
+        expect(match[1], relative(process.cwd(), file)).toMatch(
+          /^\/dashboard/,
+        );
+      }
+    }
+  });
+
+  it("keeps the console and auth screens out of the sitemap", () => {
+    const sitemap = readFileSync(join(APP_DIR, "sitemap.js"), "utf8");
+
+    expect(sitemap).not.toContain("/dashboard");
+    expect(sitemap).not.toContain("/login");
+    expect(sitemap).not.toContain("/signup");
   });
 });

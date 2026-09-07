@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/auth/dal";
 import { Button } from "@/components/ui/Button";
 import { PageHeader, PageBody } from "@/components/dashboard/PageHeader";
 import { SettingsPanels } from "@/components/dashboard/SettingsPanels";
@@ -8,7 +9,11 @@ export const metadata = {
     "Tune detection thresholds, enrichment sources, notifications and evidence handling.",
 };
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  // Authoritative check. Proxy is optimistic; this is what actually gates
+  // the page, per the Next.js auth guidance on layouts.
+  await requireUser("/dashboard/settings");
+
   return (
     <>
       <PageHeader

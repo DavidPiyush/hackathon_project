@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/auth/dal";
 import { cn } from "@/lib/utils/cn";
 import { tone as resolveTone } from "@/lib/utils/tones";
 import { geoOrigins } from "@/lib/data/dashboard";
@@ -15,7 +16,9 @@ export const metadata = {
     "Network and location context for observed sending infrastructure, with explicit limits on what geolocation can prove.",
 };
 
-export default function GeoIpPage() {
+export default async function GeoIpPage() {
+  await requireUser("/dashboard/geoip");
+
   const totalVolume = geoOrigins.reduce(
     (total, origin) => total + origin.volume,
     0,
