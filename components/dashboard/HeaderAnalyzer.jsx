@@ -17,6 +17,8 @@ import { Badge, Eyebrow } from "@/components/ui/Badge";
 import { Textarea } from "@/components/ui/Form";
 import { RiskMeter, Meter } from "@/components/ui/DataDisplay";
 import { IndicatorRow, CopyButton } from "@/components/ui/Interactive";
+import { isApiConfigured } from "@/lib/api/client";
+import { ServerAnalysis } from "@/components/dashboard/ServerAnalysis";
 
 /**
  * Live header analyzer.
@@ -135,6 +137,16 @@ export function HeaderAnalyzer() {
           </dl>
         </details>
       </Card>
+
+      {/*
+        The server pass, placed next to the input because it operates on the
+        same text — the difference is only where it runs.
+
+        Guarded here rather than inside the component: ServerAnalysis reads the
+        case list from the console store, and a component that cannot work
+        without a backend should not be mounted just to render nothing.
+      */}
+      {isApiConfigured() && <ServerAnalysis rawEmail={raw} />}
 
       {/* ================= RESULTS ================= */}
       {result && !result.ok && (

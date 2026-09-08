@@ -19,6 +19,7 @@ import { IconButton, Button } from "@/components/ui/Button";
 import { Badge, StatusDot } from "@/components/ui/Badge";
 import { Popover } from "@/components/ui/Popover";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { BackendStatus } from "@/components/dashboard/BackendStatus";
 
 /** Header height, shared by the sticky sidebar offset so the two stay aligned. */
 const HEADER_H = "h-16";
@@ -127,11 +128,11 @@ export function DashboardShell({ children, user }) {
           </Link>
 
           <div className="ml-auto flex items-center gap-2">
-            {/* Environment status */}
-            <span className="hidden items-center gap-2 rounded-lg border border-line px-3 py-2 text-xs text-ink-muted md:flex">
-              <StatusDot tone="safe" />
-              Operational
-            </span>
+            {/*
+              Real connection state, not a decorative "Operational" chip that
+              read the same whether or not the backend was reachable.
+            */}
+            <BackendStatus compact />
 
             {/* Theme: segmented on wide screens, single toggle on narrow */}
             <ThemeToggle className="hidden lg:inline-flex" />

@@ -11,6 +11,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, EmptyState } from "@/components/ui/Card";
 import { Badge, RiskBadge, StatusDot } from "@/components/ui/Badge";
+import { BackendStatus } from "@/components/dashboard/BackendStatus";
 import {
   StatCard,
   TrendChart,
@@ -84,6 +85,9 @@ export function OverviewClient() {
           delta={-4}
         />
       </div>
+
+      {/* Backend connection, so "why is nothing loading" is answerable */}
+      <BackendStatus />
 
       {/* ================= TREND + DISTRIBUTION ================= */}
       <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">

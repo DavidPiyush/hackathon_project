@@ -9,6 +9,11 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Toggle } from "@/components/ui/Interactive";
+import {
+  BackendStatus,
+  BackendProbes,
+  BackendDocsLink,
+} from "@/components/dashboard/BackendStatus";
 import { Spinner, ConfirmInline } from "@/components/ui/Feedback";
 
 /**
@@ -56,13 +61,23 @@ export function SettingsPanels() {
 
   return (
     <div className="space-y-6">
+      {/* Backend connection first: it determines what everything else can do. */}
+      <div className="grid gap-5 lg:grid-cols-2">
+        <BackendStatus />
+        <BackendProbes />
+      </div>
+
+      <div className="flex justify-end">
+        <BackendDocsLink />
+      </div>
+
       <Card tone="info" className="p-4">
         <p className="flex items-start gap-3 text-xs leading-6 text-ink-soft">
           <Icon name="info" className="mt-0.5 shrink-0 text-info" />
           <span>
-            Saved settings are stored in this browser. There is no server in
-            this build, so they will not follow you to another device — but they
-            do survive a reload.
+            The toggles below are stored in this browser, not on the backend, so
+            they will not follow you to another device — but they do survive a
+            reload.
           </span>
         </p>
       </Card>

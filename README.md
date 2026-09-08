@@ -12,20 +12,36 @@ The frontend's data model follows the **FastAPI backend's OpenAPI contract** —
 
 ---
 
+## Documentation
+
+| Guide | What is in it |
+| --- | --- |
+| **[docs/GETTING-STARTED.md](./docs/GETTING-STARTED.md)** | How to run it, how to sign in, what every screen does, where data lives, and how to connect the FastAPI backend |
+| **[docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)** | Every reported fault with its **exact symptom**, root cause and fix — start here if something is not working |
+
+---
+
 ## Quick start
 
 ```bash
 npm install
-cp .env.example .env.local   # SESSION_SECRET optional in dev, required in production
-npm run dev                  # http://localhost:3000
+npm run dev        # http://localhost:3000
 ```
 
-### Connecting the backend
+That is the whole setup. `npm run dev` and `npm run build` run `scripts/ensure-env.mjs` first, which
+generates a `SESSION_SECRET` into `.env.local` if one is missing — so a fresh clone works without
+configuring anything. `npm run setup` does the same on demand.
 
-Set `NEXT_PUBLIC_API_URL` to the FastAPI origin. With it set, **Continue with Google** points at
-`GET /auth/google` — the API's real authentication path — and `lib/api/client.js` can reach every
-documented endpoint. Without it, Google sign-in is disabled with an explanation and the console runs
-against its local demo store.
+| Script               | What it does                                       |
+| -------------------- | -------------------------------------------------- |
+| `npm run dev`        | Development server                                 |
+| `npm run build`      | Production build                                    |
+| `npm start`          | Serve the production build                          |
+| `npm run setup`      | Generate `SESSION_SECRET` into `.env.local`         |
+| `npm run lint`       | ESLint (flat config, `eslint-config-next`)          |
+| `npm test`           | Vitest suite, single run                            |
+| `npm run test:watch` | Vitest in watch mode                                |
+| `npm run verify`     | Lint → test → build, in that order                  |
 
 ### Signing in
 
@@ -41,15 +57,46 @@ sign-in page with a **Use this** button:
 > password path above is local to this frontend, which is what makes the console openable with no
 > backend running.
 
-| Script               | What it does                               |
-| -------------------- | ------------------------------------------ |
-| `npm run dev`        | Development server                         |
-| `npm run build`      | Production build                           |
-| `npm start`          | Serve the production build                 |
-| `npm run lint`       | ESLint (flat config, `eslint-config-next`) |
-| `npm test`           | Vitest suite, single run                   |
-| `npm run test:watch` | Vitest in watch mode                       |
-| `npm run verify`     | Lint → test → build, in that order         |
+### Connecting the FastAPI backend
+
+Point the frontend at the API and restart (`NEXT_PUBLIC_*` is inlined at build time):
+
+```bash
+# .env.local
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+Then allow this origin on the backend. **This is the step that catches people out:** the backend
+session is a cookie, so every request is sent with `credentials: "include"`, and a browser *refuses*
+a credentialed request answered with `Access-Control-Allow-Origin: *`.
+
+```python
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],   # not ["*"]
+    allow_credentials=True,                    # required for the session cookie
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+With the backend reachable:
+
+| Surface | Endpoint | Where it appears |
+| --- | --- | --- |
+| Health and connection state | `GET /health/full` + the four specific probes | `BackendStatus` on `/dashboard`, probes on `/dashboard/settings`, a chip in the console header |
+| Server-side analysis | `POST /analysis/email` | `ServerAnalysis`, below the in-browser parser on `/dashboard/analysis` |
+| Google sign-in | `GET /auth/google` | `/login` and `/signup` |
+
+`lib/api/client.js` covers the rest of the contract — Gmail, investigations, reports — and every
+endpoint in `lib/api/schema.js` is callable today. With `NEXT_PUBLIC_API_URL` unset, no requests are
+made at all: the Google button is disabled with an explanation, the connection panel says
+**Local mode**, and the console runs against its local store.
+
+If the panel says *"Could not reach the backend"*, see
+**[Troubleshooting](./docs/TROUBLESHOOTING.md)** — it is almost always the CORS rule above.
 
 ---
 
@@ -131,12 +178,15 @@ components/
   dashboard/                Console shell, evidence panels, CRUD islands
 
 lib/
-  api/                      schema (transcribed from OpenAPI) + HTTP client
+  api/                      schema (transcribed from OpenAPI), HTTP client, React hooks
   auth/                     password, session, users, dal, rate-limit, validation
   data/                     Pure seed data — no UI imports
   store/                    Reducer, selectors, theme store
   utils/                    Risk scale, header parser, tones, formatting
   actions/                  Server Actions
+
+docs/                       Getting started, troubleshooting
+scripts/ensure-env.mjs      Generates SESSION_SECRET so a fresh clone runs
 
 proxy.js                    Optimistic auth gate (Middleware was renamed in Next 16)
 
@@ -174,6 +224,17 @@ deliberately the shape a database adapter would have — `findByEmail`, `findByI
 message rather than signing sessions with a value that is public in this repository — and rather
 than failing closed on every request, which would present as "login is broken".
 
+Because `.env.local` is gitignored, a fresh clone had no secret, so a production build returned a
+bare **"UNEXPECTED ERROR"** on sign-in with the real cause visible only in the server log. Two fixes:
+`scripts/ensure-env.mjs` generates the secret on `dev` and `build`, and the sign-in form now names
+the missing variable and the command that fixes it. See
+[Troubleshooting](./docs/TROUBLESHOOTING.md#1-sign-in-failed-on-a-production-build-with-no-envlocal).
+
+Seeding the demo accounts caches the seeding **promise**, not a `seeded` boolean. Hashing takes
+~100ms by design, and the earlier flag was set before the await — so a concurrent caller read an
+empty store and a correct password came back as **"Incorrect email or password."** on the very first
+attempt. `auth-session.test.js` drives two concurrent lookups and fails on the old code.
+
 ### Backend contract
 
 `lib/api/schema.js` is transcribed from the OpenAPI document: every endpoint, and every request
@@ -184,6 +245,12 @@ so an over-long title never becomes a 422 the user has to decode, and maps FastA
 
 The console's own seed data uses the API's field names rather than names an isolated frontend would
 have invented. `__tests__/api-contract.test.js` fails if the two drift apart.
+
+Three surfaces are wired to the live API: `BackendStatus` (health, polled every 30s, with the CORS
+explanation inline when a request fails at the network layer), `ServerAnalysis` (`POST /analysis/email`,
+rendering the untyped response as a depth-capped tree rather than guessing its shape), and Google
+sign-in. All of them go through `lib/api/useBackend.js`, so the four states a request actually has —
+not configured, loading, error, data — are handled identically everywhere.
 
 ### Single sources of truth
 
