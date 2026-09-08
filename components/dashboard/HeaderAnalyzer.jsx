@@ -18,19 +18,310 @@ import { Textarea } from "@/components/ui/Form";
 import { RiskMeter, Meter } from "@/components/ui/DataDisplay";
 import { IndicatorRow, CopyButton } from "@/components/ui/Interactive";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
 /**
- * Live header analyzer.
+ * ============================================================
+ * HELPERS
+ * ============================================================
+ */
+
+function normalizeBackendAuthentication(authentication) {
+  if (!authentication) {
+    return {
+      spf: {
+        result: "unknown",
+        detail: "No SPF result returned by the backend.",
+      },
+      dkim: {
+        result: "unknown",
+        detail: "No DKIM result returned by the backend.",
+      },
+      dmarc: {
+        result: "unknown",
+        detail: "No DMARC result returned by the backend.",
+      },
+      alignment: {
+        result: "unknown",
+        detail: "No alignment result returned by the backend.",
+      },
+    };
+  }
+
+  const normalize = (value, fallback) => {
+    if (typeof value === "string") {
+      return {
+        result: value,
+        detail: fallback,
+      };
+    }
+
+    return {
+      result: value?.result || value?.status || "unknown",
+      detail: value?.detail || value?.reason || fallback,
+    };
+  };
+
+  return {
+    spf: normalize(
+      authentication.spf,
+      "SPF analysis was returned without additional detail.",
+    ),
+    dkim: normalize(
+      authentication.dkim,
+      "DKIM analysis was returned without additional detail.",
+    ),
+    dmarc: normalize(
+      authentication.dmarc,
+      "DMARC analysis was returned without additional detail.",
+    ),
+    alignment: normalize(
+      authentication.alignment,
+      "Sender alignment could not be established.",
+    ),
+  };
+}
+
+function normalizeBackendResult(data) {
+  const email = data?.email || {};
+  const risk = data?.risk || {};
+  const authentication = data?.authentication || {};
+
+  const score =
+    typeof risk?.score === "number"
+      ? risk.score
+      : typeof risk?.risk_score === "number"
+        ? risk.risk_score
+        : typeof risk?.total === "number"
+          ? risk.total
+          : 0;
+
+  const findings = Array.isArray(data?.findings) ? data.findings : [];
+
+  const indicators = Array.isArray(data?.threat_intelligence?.indicators)
+    ? data.threat_intelligence.indicators
+    : Array.isArray(email?.indicators)
+      ? email.indicators
+      : [];
+
+  const signals = Array.isArray(risk?.signals)
+    ? risk.signals
+    : Array.isArray(risk?.breakdown)
+      ? risk.breakdown
+      : [];
+
+  const hops = Array.isArray(email?.received)
+    ? email.received
+    : Array.isArray(email?.received_hops)
+      ? email.received_hops
+      : [];
+
+  const headers = Array.isArray(email?.headers) ? email.headers : [];
+
+  return {
+    ok: true,
+
+    score,
+
+    signals: signals.map((signal, index) => ({
+      name:
+        signal?.name || signal?.signal || signal?.type || `Signal ${index + 1}`,
+      weight:
+        typeof signal?.weight === "number"
+          ? signal.weight
+          : typeof signal?.score === "number"
+            ? signal.score
+            : 0,
+      detail: signal?.detail || signal?.description || "",
+    })),
+
+    headerCount: headers.length,
+
+    from: email?.from || email?.sender || null,
+
+    subject: email?.subject || null,
+
+    date: email?.date || null,
+
+    messageId: email?.message_id || email?.messageId || null,
+
+    authentication: normalizeBackendAuthentication(authentication),
+
+    hops: hops.map((hop, index) => ({
+      hop: hop?.hop || index + 1,
+
+      from: hop?.from || null,
+
+      by: hop?.by || hop?.relay || null,
+
+      protocol: hop?.protocol || null,
+
+      timestamp: hop?.timestamp || null,
+
+      ips: Array.isArray(hop?.ips) ? hop.ips : hop?.ip ? [hop.ip] : [],
+
+      raw: hop?.raw || "",
+    })),
+
+    indicators: indicators.map((indicator) => ({
+      type: indicator?.type || "unknown",
+
+      value: indicator?.value || "",
+
+      note: indicator?.note || indicator?.description || "",
+
+      verdict: indicator?.verdict || "unknown",
+    })),
+
+    findings: findings.map((finding, index) => ({
+      id: finding?.id || finding?.finding_id || `finding-${index + 1}`,
+
+      type: finding?.type || "Finding",
+
+      severity: finding?.severity || "unknown",
+
+      description: finding?.description || finding?.detail || "",
+
+      evidence: finding?.evidence || {},
+    })),
+
+    headers: headers.map((header) => ({
+      key: header?.key || String(header?.name || "").toLowerCase(),
+
+      name: header?.name || "",
+
+      value: header?.value || "",
+    })),
+
+    backend: data,
+  };
+}
+
+/**
+ * ============================================================
+ * LIVE HEADER ANALYZER
+ * ============================================================
  *
- * This is the working core of the analysis page. Paste raw headers and the
- * routing path, authentication results, indicators and a scored, explained
- * assessment are produced in the browser — the message never leaves the
- * machine, which is the correct handling for potentially hostile evidence.
+ * Stage 1:
+ * Local header analysis gives the analyst immediate feedback.
+ *
+ * Stage 2:
+ * The same evidence is sent to the existing FastAPI
+ * /analysis/email endpoint for deeper forensic analysis.
  */
 export function HeaderAnalyzer() {
   const [raw, setRaw] = useState("");
   const [result, setResult] = useState(null);
+  const [backendResult, setBackendResult] = useState(null);
 
-  const analyze = (input) => {
+  const [loading, setLoading] = useState(false);
+
+  const [backendError, setBackendError] = useState("");
+
+  /**
+   * ----------------------------------------------------------
+   * Local analysis
+   * ----------------------------------------------------------
+   */
+  const runLocalAnalysis = (input) => {
+    const value = input ?? raw;
+
+    if (!value.trim()) {
+      setResult({
+        ok: false,
+        error: "Paste the raw headers of the message you want to analyse.",
+      });
+
+      return null;
+    }
+
+    const parsed = parseEmailHeaders(value);
+
+    setResult(parsed);
+
+    return parsed;
+  };
+
+  /**
+   * ----------------------------------------------------------
+   * Backend analysis
+   * ----------------------------------------------------------
+   */
+  const runBackendAnalysis = async (value) => {
+    setLoading(true);
+    setBackendError("");
+    setBackendResult(null);
+
+    try {
+      const response = await fetch(`${API_URL}/analysis/email`, {
+        method: "POST",
+
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+
+        credentials: "include",
+
+        body: JSON.stringify({
+          raw_email: value,
+        }),
+
+        cache: "no-store",
+      });
+
+      let data = null;
+
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data?.detail ||
+            data?.message ||
+            `Analysis failed with status ${response.status}`,
+        );
+      }
+
+      if (!data?.success) {
+        throw new Error(
+          data?.error || "The forensic analysis did not complete successfully.",
+        );
+      }
+
+      const normalized = normalizeBackendResult(data);
+
+      setBackendResult(normalized);
+
+      /*
+       * Backend analysis becomes the authoritative
+       * enriched result when available.
+       */
+      setResult(normalized);
+
+      return normalized;
+    } catch (error) {
+      console.error("[HeaderAnalyzer] Backend analysis failed:", error);
+
+      setBackendError(
+        error?.message || "Unable to reach the ThreatDetect analysis engine.",
+      );
+
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * ----------------------------------------------------------
+   * ANALYZE
+   * ----------------------------------------------------------
+   */
+  const analyze = async (input) => {
     const value = input ?? raw;
 
     if (!value.trim()) {
@@ -42,31 +333,70 @@ export function HeaderAnalyzer() {
       return;
     }
 
-    setResult(parseEmailHeaders(value));
+    /*
+     * First show the local result immediately.
+     */
+    const local = runLocalAnalysis(value);
+
+    if (!local?.ok) {
+      return;
+    }
+
+    /*
+     * Then run deeper backend analysis.
+     */
+    await runBackendAnalysis(value);
   };
 
-  const loadSample = () => {
+  /**
+   * ----------------------------------------------------------
+   * SAMPLE
+   * ----------------------------------------------------------
+   */
+  const loadSample = async () => {
     setRaw(SAMPLE_HEADERS);
-    setResult(parseEmailHeaders(SAMPLE_HEADERS));
+
+    const local = parseEmailHeaders(SAMPLE_HEADERS);
+
+    setResult(local);
+    setBackendError("");
+
+    /*
+     * The sample contains complete headers only,
+     * so the backend receives the same RFC-style
+     * evidence for server-side enrichment.
+     */
+    await runBackendAnalysis(SAMPLE_HEADERS);
   };
 
+  /**
+   * ----------------------------------------------------------
+   * RESET
+   * ----------------------------------------------------------
+   */
   const reset = () => {
     setRaw("");
     setResult(null);
+    setBackendResult(null);
+    setBackendError("");
+    setLoading(false);
   };
 
   return (
     <div className="space-y-6">
-      {/* ================= INPUT ================= */}
+      {/* ======================================================
+          INPUT
+          ====================================================== */}
+
       <Card className="p-6">
         <CardHeader
           icon="terminal"
           title="Submit raw headers"
-          subtitle="Parsed locally in your browser — nothing is uploaded"
+          subtitle="Parsed locally first, then enriched by the ThreatDetect analysis engine"
           level={2}
           actions={
             <Badge tone="safe" size="sm" icon="lock">
-              Client-side
+              Hybrid analysis
             </Badge>
           }
         />
@@ -82,33 +412,44 @@ export function HeaderAnalyzer() {
             onChange={(event) => setRaw(event.target.value)}
             rows={10}
             spellCheck={false}
+            disabled={loading}
             placeholder={`Received: from mail.example.com (mail.example.com [203.0.113.10])\nFrom: "Sender" <sender@example.com>\nSubject: …`}
             className="ioc leading-6"
           />
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button onClick={() => analyze()} icon="search">
-            Analyze headers
+          <Button onClick={() => analyze()} icon="search" disabled={loading}>
+            {loading ? "Analysing..." : "Analyze headers"}
           </Button>
 
-          <Button onClick={loadSample} variant="secondary" icon="file">
+          <Button
+            onClick={loadSample}
+            variant="secondary"
+            icon="file"
+            disabled={loading}
+          >
             Load sample
           </Button>
 
           {(raw || result) && (
-            <Button onClick={reset} variant="ghost" icon="refresh">
+            <Button
+              onClick={reset}
+              variant="ghost"
+              icon="refresh"
+              disabled={loading}
+            >
               Clear
             </Button>
           )}
 
           <p className="ml-auto hidden text-[11px] text-ink-faint sm:block">
-            In most clients: <em className="not-italic text-ink-soft">Show original</em>{" "}
-            or <em className="not-italic text-ink-soft">View source</em>
+            In most clients:{" "}
+            <em className="not-italic text-ink-soft">Show original</em> or{" "}
+            <em className="not-italic text-ink-soft">View source</em>
           </p>
         </div>
 
-        {/* How to obtain headers — genuinely useful, and cheap to include */}
         <details className="group mt-5 rounded-lg border border-line bg-raise">
           <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-xs font-medium text-ink-soft">
             Where do I find the raw headers?
@@ -120,15 +461,31 @@ export function HeaderAnalyzer() {
 
           <dl className="space-y-2.5 border-t border-line px-4 py-4">
             {[
-              { client: "Gmail", path: "Open the message → ⋮ → Show original" },
-              { client: "Outlook (web)", path: "Open the message → ⋯ → View → View message source" },
-              { client: "Apple Mail", path: "View → Message → All Headers" },
-              { client: "Thunderbird", path: "View → Message Source (Ctrl+U)" },
+              {
+                client: "Gmail",
+                path: "Open the message → ⋮ → Show original",
+              },
+              {
+                client: "Outlook (web)",
+                path: "Open the message → ⋯ → View → View message source",
+              },
+              {
+                client: "Apple Mail",
+                path: "View → Message → All Headers",
+              },
+              {
+                client: "Thunderbird",
+                path: "View → Message Source (Ctrl+U)",
+              },
             ].map((item) => (
-              <div key={item.client} className="flex flex-wrap gap-x-3 text-[11px]">
+              <div
+                key={item.client}
+                className="flex flex-wrap gap-x-3 text-[11px]"
+              >
                 <dt className="w-28 shrink-0 font-medium text-ink-soft">
                   {item.client}
                 </dt>
+
                 <dd className="text-ink-muted">{item.path}</dd>
               </div>
             ))}
@@ -136,11 +493,34 @@ export function HeaderAnalyzer() {
         </details>
       </Card>
 
-      {/* ================= RESULTS ================= */}
+      {/* ======================================================
+          BACKEND ERROR
+          ====================================================== */}
+
+      {backendError && (
+        <Card tone="warn" className="p-5">
+          <p className="flex items-start gap-3 text-xs leading-6 text-ink-soft">
+            <Icon name="warning" className="mt-0.5 shrink-0 text-warn" />
+
+            <span>
+              <strong className="font-semibold text-ink">
+                Deep analysis unavailable.
+              </strong>{" "}
+              Local header analysis is still available. {backendError}
+            </span>
+          </p>
+        </Card>
+      )}
+
+      {/* ======================================================
+          RESULTS
+          ====================================================== */}
+
       {result && !result.ok && (
         <Card tone="warn" className="p-5">
           <p className="flex items-start gap-3 text-xs leading-6 text-ink-soft">
             <Icon name="warning" className="mt-0.5 shrink-0 text-warn" />
+
             {result.error}
           </p>
         </Card>
@@ -148,7 +528,10 @@ export function HeaderAnalyzer() {
 
       {result?.ok && (
         <div className="space-y-6 motion-safe:animate-rise">
-          {/* ---- Verdict ---- */}
+          {/* ==================================================
+              VERDICT
+              ================================================== */}
+
           <div className="grid gap-5 lg:grid-cols-[1fr_1.4fr]">
             <RiskMeter score={result.score} />
 
@@ -156,20 +539,25 @@ export function HeaderAnalyzer() {
               <CardHeader
                 icon="brain"
                 title="Why this score"
-                subtitle={`${result.signals.length} contributing signal${result.signals.length === 1 ? "" : "s"}`}
+                subtitle={`${result.signals.length} contributing signal${
+                  result.signals.length === 1 ? "" : "s"
+                }`}
                 level={2}
               />
 
               {result.signals.length === 0 ? (
                 <p className="mt-5 flex items-start gap-2 text-xs leading-6 text-ink-soft">
-                  <Icon name="check-circle" className="mt-0.5 shrink-0 text-safe" />
+                  <Icon
+                    name="check-circle"
+                    className="mt-0.5 shrink-0 text-safe"
+                  />
                   No header-level risk signals fired. Headers alone cannot prove
                   a message is safe — content and payload analysis still apply.
                 </p>
               ) : (
                 <ul className="mt-5 space-y-3">
-                  {result.signals.map((signal) => (
-                    <li key={signal.name}>
+                  {result.signals.map((signal, index) => (
+                    <li key={`${signal.name}-${index}`}>
                       <div className="flex items-baseline justify-between gap-3">
                         <span className="text-xs font-medium text-ink">
                           {signal.name}
@@ -199,7 +587,10 @@ export function HeaderAnalyzer() {
             </Card>
           </div>
 
-          {/* ---- Message identity ---- */}
+          {/* ==================================================
+              MESSAGE IDENTITY
+              ================================================== */}
+
           <Card className="p-5">
             <CardHeader
               icon="fingerprint"
@@ -209,9 +600,23 @@ export function HeaderAnalyzer() {
             />
 
             <dl className="mt-5 grid gap-2.5 sm:grid-cols-2">
-              <KeyValue label="From" value={result.from ?? "Not present"} mono />
-              <KeyValue label="Subject" value={result.subject ?? "Not present"} />
-              <KeyValue label="Date" value={result.date ?? "Not present"} mono />
+              <KeyValue
+                label="From"
+                value={result.from ?? "Not present"}
+                mono
+              />
+
+              <KeyValue
+                label="Subject"
+                value={result.subject ?? "Not present"}
+              />
+
+              <KeyValue
+                label="Date"
+                value={result.date ?? "Not present"}
+                mono
+              />
+
               <KeyValue
                 label="Message ID"
                 value={result.messageId ?? "Not present"}
@@ -220,12 +625,15 @@ export function HeaderAnalyzer() {
             </dl>
           </Card>
 
-          {/* ---- Authentication ---- */}
+          {/* ==================================================
+              AUTHENTICATION
+              ================================================== */}
+
           <Card className="p-5">
             <CardHeader
               icon="lock"
               title="Authentication results"
-              subtitle="Read from Authentication-Results and Received-SPF"
+              subtitle="SPF, DKIM, DMARC and sender alignment"
               level={2}
             />
 
@@ -236,17 +644,19 @@ export function HeaderAnalyzer() {
                 ["dmarc", "DMARC"],
                 ["alignment", "Alignment"],
               ].map(([key, label]) => {
-                const entry = result.authentication[key];
+                const entry = result.authentication?.[key] || {
+                  result: "unknown",
+                  detail: "No result available.",
+                };
+
                 const toneName = AUTH_TONES[entry.result] ?? "neutral";
+
                 const t = resolveTone(toneName);
 
                 return (
                   <div
                     key={key}
-                    className={cn(
-                      "rounded-lg border bg-raise p-3",
-                      t.border,
-                    )}
+                    className={cn("rounded-lg border bg-raise p-3", t.border)}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-mono text-xs font-semibold uppercase tracking-wider text-ink">
@@ -267,7 +677,10 @@ export function HeaderAnalyzer() {
             </div>
           </Card>
 
-          {/* ---- Routing path ---- */}
+          {/* ==================================================
+              ROUTING PATH
+              ================================================== */}
+
           <Card className="p-5">
             <CardHeader
               icon="sitemap"
@@ -280,7 +693,7 @@ export function HeaderAnalyzer() {
               <EmptyState
                 icon="sitemap"
                 title="No routing path available"
-                description="The pasted headers contained no Received entries, so the path the message took cannot be reconstructed."
+                description="The submitted headers contained no Received entries."
                 className="py-10"
               />
             ) : (
@@ -299,7 +712,10 @@ export function HeaderAnalyzer() {
                         {hop.from ?? "unknown origin"}
                       </span>
 
-                      <Icon name="arrow-right" className="text-[9px] text-ink-faint" />
+                      <Icon
+                        name="arrow-right"
+                        className="text-[9px] text-ink-faint"
+                      />
 
                       <span className="ioc text-ink-soft">
                         {hop.by ?? "unknown relay"}
@@ -323,7 +739,9 @@ export function HeaderAnalyzer() {
                       {hop.ips.map((ip) => (
                         <span key={ip} className="flex items-center gap-1">
                           <Icon name="server" />
+
                           <span className="ioc text-ink-muted">{ip}</span>
+
                           <CopyButton value={ip} label={`Copy ${ip}`} />
                         </span>
                       ))}
@@ -334,12 +752,17 @@ export function HeaderAnalyzer() {
             )}
           </Card>
 
-          {/* ---- Indicators ---- */}
+          {/* ==================================================
+              INDICATORS
+              ================================================== */}
+
           <Card className="p-5">
             <CardHeader
               icon="tag"
               title="Extracted indicators"
-              subtitle={`${result.indicators.length} candidate${result.indicators.length === 1 ? "" : "s"} — verdicts require enrichment`}
+              subtitle={`${result.indicators.length} candidate${
+                result.indicators.length === 1 ? "" : "s"
+              }`}
               level={2}
             />
 
@@ -355,7 +778,9 @@ export function HeaderAnalyzer() {
                   <li key={`${indicator.type}-${indicator.value}`}>
                     <IndicatorRow
                       indicator={indicator}
-                      verdictTone={VERDICT_TONES[indicator.verdict] ?? "neutral"}
+                      verdictTone={
+                        VERDICT_TONES[indicator.verdict] ?? "neutral"
+                      }
                     />
 
                     {indicator.note && (
@@ -370,14 +795,67 @@ export function HeaderAnalyzer() {
 
             <p className="mt-4 flex items-start gap-2 rounded-lg border border-info/20 bg-info/[0.06] p-3 text-[11px] leading-5 text-ink-soft">
               <Icon name="info" className="mt-0.5 shrink-0 text-info" />
-              Every verdict reads{" "}
-              <strong className="font-semibold text-ink">unknown</strong> because
-              this pass is header-only. Assigning a verdict needs DNS, RDAP and
-              reputation enrichment, which a browser cannot perform.
+              Backend enrichment can correlate indicators with DNS, RDAP,
+              reputation and other threat-intelligence sources.
             </p>
           </Card>
 
-          {/* ---- All headers ---- */}
+          {/* ==================================================
+              FINDINGS
+              ================================================== */}
+
+          {result.findings?.length > 0 && (
+            <Card className="p-5">
+              <CardHeader
+                icon="warning"
+                title="Forensic findings"
+                subtitle={`${result.findings.length} finding${
+                  result.findings.length === 1 ? "" : "s"
+                } returned by the analysis engine`}
+                level={2}
+              />
+
+              <ul className="mt-5 space-y-3">
+                {result.findings.map((finding) => (
+                  <li
+                    key={finding.id}
+                    className="rounded-lg border border-line bg-raise p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-ink">
+                        {finding.type}
+                      </span>
+
+                      <Badge
+                        tone={
+                          finding.severity === "critical"
+                            ? "critical"
+                            : finding.severity === "high"
+                              ? "high"
+                              : finding.severity === "medium"
+                                ? "warn"
+                                : "neutral"
+                        }
+                        size="xs"
+                        uppercase
+                      >
+                        {finding.severity}
+                      </Badge>
+                    </div>
+
+                    <p className="mt-2 text-xs leading-6 text-ink-soft">
+                      {finding.description}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
+          {/* ==================================================
+              ALL HEADERS
+              ================================================== */}
+
           <Card padded={false} className="overflow-hidden">
             <div className="border-b border-line p-5">
               <CardHeader
@@ -402,6 +880,7 @@ export function HeaderAnalyzer() {
                     >
                       Header
                     </th>
+
                     <th
                       scope="col"
                       className="px-5 py-2.5 text-[10px] font-medium uppercase tracking-wider text-ink-faint"
@@ -436,6 +915,10 @@ export function HeaderAnalyzer() {
         </div>
       )}
 
+      {/* ========================================================
+          READY STATE
+          ======================================================== */}
+
       {!result && (
         <Card className="p-6">
           <Eyebrow icon="info">Ready</Eyebrow>
@@ -446,6 +929,7 @@ export function HeaderAnalyzer() {
               type="button"
               onClick={loadSample}
               className="font-medium text-accent underline decoration-accent/40 underline-offset-2 transition hover:decoration-accent"
+              disabled={loading}
             >
               load the sample message
             </button>{" "}

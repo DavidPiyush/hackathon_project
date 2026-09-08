@@ -8,6 +8,7 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
 } from "react";
 
 import {
@@ -17,64 +18,510 @@ import {
   serialize,
   STORAGE_KEY,
 } from "@/lib/store/reducer";
+
 import { useToast } from "@/components/providers/ToastProvider";
 
 const DataContext = createContext(null);
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+/* ============================================================
+   API
+   ============================================================ */
+
+async function apiFetch(path, options = {}) {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      ...(options.headers || {}),
+    },
+  });
+
+  let data = null;
+
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const message =
+      data?.detail ||
+      data?.message ||
+      `Request failed with status ${response.status}`;
+
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+/* ============================================================
+   GMAIL HELPERS
+   ============================================================ */
+
+function headerValue(headers, name) {
+  const header = (headers || []).find(
+    (item) => String(item?.name || "").toLowerCase() === name.toLowerCase(),
+  );
+
+  return header?.value || "";
+}
+
+function decodeBase64Url(value) {
+  if (!value) {
+    return "";
+  }
+
+  try {
+    const normalized = String(value).replace(/-/g, "+").replace(/_/g, "/");
+
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+
+    const binary = window.atob(padded);
+
+    const bytes = Uint8Array.from(binary, (character) =>
+      character.charCodeAt(0),
+    );
+
+    return new TextDecoder("utf-8").decode(bytes);
+  } catch (error) {
+    console.warn("[DataProvider] Failed to decode Gmail body:", error);
+
+    return "";
+  }
+}
+
 /**
- * Console data store.
+ * Gmail's full message is a MIME tree.
  *
- * There is no backend, so this is the system of record: a reducer over the
- * seed data, persisted to localStorage so an analyst's work survives a reload.
- * Every mutation reports through a toast, and destructive ones offer undo,
- * which is why the reducer soft-deletes rather than dropping rows.
- *
- * Pages stay server components; only the interactive islands inside them
- * consume this, and they sit below the provider in the React tree.
+ * Walk every part because body.data may not be directly
+ * located on payload.body.
  */
+function collectMessageParts(part, result) {
+  if (!part) {
+    return;
+  }
+
+  const mimeType = String(part.mimeType || "").toLowerCase();
+
+  if (
+    (mimeType === "text/plain" || mimeType === "text/html") &&
+    part.body?.data
+  ) {
+    const decoded = decodeBase64Url(part.body.data);
+
+    if (mimeType === "text/plain") {
+      result.plain.push(decoded);
+    }
+
+    if (mimeType === "text/html") {
+      result.html.push(decoded);
+    }
+  }
+
+  for (const child of part.parts || []) {
+    collectMessageParts(child, result);
+  }
+}
+
+function extractMessageBody(message) {
+  const result = {
+    plain: [],
+    html: [],
+  };
+
+  collectMessageParts(message?.payload, result);
+
+  /*
+   * Some Gmail messages may have body.data directly
+   * on payload rather than inside parts.
+   */
+  if (
+    !result.plain.length &&
+    !result.html.length &&
+    message?.payload?.body?.data
+  ) {
+    const mimeType = String(message?.payload?.mimeType || "").toLowerCase();
+
+    const decoded = decodeBase64Url(message.payload.body.data);
+
+    if (mimeType === "text/html") {
+      result.html.push(decoded);
+    } else {
+      result.plain.push(decoded);
+    }
+  }
+
+  return {
+    text: result.plain.join("\n\n").trim(),
+    html: result.html.join("\n").trim(),
+  };
+}
+
+function parseSender(value) {
+  if (!value) {
+    return {
+      name: "Unknown sender",
+      email: "",
+    };
+  }
+
+  const match = String(value).match(/^(.*?)\s*<([^<>]+)>$/);
+
+  if (match) {
+    return {
+      name: match[1].replace(/^["']|["']$/g, "").trim(),
+      email: match[2].trim(),
+    };
+  }
+
+  return {
+    name: String(value).trim(),
+    email: String(value).trim(),
+  };
+}
+
+function extractAttachments(part, attachments = []) {
+  if (!part) {
+    return attachments;
+  }
+
+  if (part.filename) {
+    attachments.push({
+      filename: part.filename,
+      mimeType: part.mimeType || "application/octet-stream",
+      size: part.body?.size || 0,
+      attachmentId: part.body?.attachmentId || null,
+    });
+  }
+
+  for (const child of part.parts || []) {
+    extractAttachments(child, attachments);
+  }
+
+  return attachments;
+}
+
+/* ============================================================
+   GMAIL -> EXISTING UI MODEL
+   ============================================================ */
+
+function normalizeGmailMessage(response) {
+  const message = response?.message || {};
+  const metadata = response?.metadata || {};
+  const payload = message.payload || {};
+  const headers = payload.headers || [];
+
+  const sender = parseSender(metadata.from || headerValue(headers, "From"));
+
+  const subject =
+    metadata.subject || headerValue(headers, "Subject") || "(No subject)";
+
+  const receivedAt = metadata.date || headerValue(headers, "Date") || "";
+
+  const body = extractMessageBody(message);
+
+  const attachments = extractAttachments(payload);
+
+  const labelIds = Array.isArray(message.labelIds)
+    ? message.labelIds
+    : Array.isArray(metadata.label_ids)
+      ? metadata.label_ids
+      : [];
+
+  /*
+   * Gmail system labels
+   */
+  const unread = labelIds.includes("UNREAD");
+
+  const deleted = labelIds.includes("TRASH");
+
+  /*
+   * Gmail does not normally expose an "ARCHIVE" label.
+   *
+   * A message is archived when it is no longer in INBOX
+   * and is not in TRASH.
+   */
+  const archived = !labelIds.includes("INBOX") && !deleted;
+
+  const starred = labelIds.includes("STARRED");
+
+  return {
+    /*
+     * Identity
+     */
+    id: message.id || metadata.message_id,
+
+    gmailMessageId: message.id || metadata.message_id,
+
+    threadId: message.threadId || metadata.thread_id || null,
+
+    /*
+     * Existing inbox fields
+     */
+    sender: sender.name,
+
+    senderEmail: sender.email,
+
+    subject,
+
+    preview: metadata.snippet || message.snippet || body.text.slice(0, 180),
+
+    receivedAt,
+
+    time: receivedAt,
+
+    /*
+     * Content
+     */
+    body: body.text,
+
+    bodyText: body.text,
+
+    bodyHtml: body.html,
+
+    /*
+     * Raw Gmail information
+     */
+    snippet: message.snippet || metadata.snippet || "",
+
+    labels: labelIds,
+
+    headers: headers.map((header) => ({
+      name: header.name,
+      value: header.value,
+    })),
+
+    /*
+     * Existing threat UI.
+     *
+     * Gmail itself does not return a ThreatDetect
+     * risk verdict.
+     */
+    risk: 0,
+
+    classification: "unknown",
+
+    authentication: {
+      spf: "unknown",
+      dkim: "unknown",
+      dmarc: "unknown",
+    },
+
+    infrastructure: {},
+
+    indicators: [],
+
+    findings: [],
+
+    attachments,
+
+    attachment: attachments.length > 0,
+
+    link:
+      /https?:\/\/|www\./i.test(body.text) ||
+      /https?:\/\/|www\./i.test(body.html),
+
+    /*
+     * Existing local-console state
+     */
+    starred,
+
+    unread,
+
+    archived,
+
+    deleted,
+
+    caseId: null,
+
+    /*
+     * Evidence metadata
+     */
+    internalDate: message.internalDate || metadata.internal_date || null,
+
+    sizeEstimate: message.sizeEstimate || metadata.size_estimate || 0,
+
+    historyId: message.historyId || null,
+
+    messageId: headerValue(headers, "Message-ID") || null,
+
+    replyTo: headerValue(headers, "Reply-To") || null,
+
+    returnPath: headerValue(headers, "Return-Path") || null,
+
+    to: metadata.to || headerValue(headers, "To") || "",
+  };
+}
+
+/* ============================================================
+   PROVIDER
+   ============================================================ */
+
 export function DataProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, initialState);
+
   const { push } = useToast();
+
   const hydrated = useRef(false);
 
-  /** Restore a stored snapshot once, on mount. */
+  const [backendLoading, setBackendLoading] = useState(true);
+
+  const [backendError, setBackendError] = useState(null);
+
+  const [backendConnected, setBackendConnected] = useState(false);
+
+  /* ==========================================================
+     LOCAL STORAGE HYDRATION
+     ========================================================== */
+
   useEffect(() => {
     let stored = null;
 
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
+
       stored = raw ? JSON.parse(raw) : null;
     } catch {
-      // Corrupt or blocked storage — carry on with the seed rather than
-      // leaving the console empty.
       stored = null;
     }
 
     if (stored) {
-      dispatch({ type: "state/hydrate", state: deserialize(stored) });
+      dispatch({
+        type: "state/hydrate",
+        state: deserialize(stored),
+      });
     }
 
     hydrated.current = true;
   }, []);
 
-  /** Persist after every mutation, but never write the seed over stored state. */
+  /* ==========================================================
+     LOCAL STORAGE PERSISTENCE
+     ========================================================== */
+
   useEffect(() => {
     if (!hydrated.current || state.revision === 0) {
       return;
     }
 
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(serialize(state)));
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(serialize(state)),
+      );
     } catch {
-      // Quota exceeded or storage blocked. The session still works; the work
-      // simply will not survive a reload.
+      // Storage is optional.
     }
   }, [state]);
 
-  /* ---------------- Email actions ---------------- */
+  /* ==========================================================
+     LOAD REAL GMAIL DATA
+     ========================================================== */
+
+  const loadGmailMessages = useCallback(async () => {
+    setBackendLoading(true);
+    setBackendError(null);
+
+    try {
+      /*
+       * First request:
+       *
+       * GET /gmail/messages
+       *
+       * This returns Gmail message references.
+       */
+      const listResponse = await apiFetch("/gmail/messages?max_results=20");
+
+      const messageRefs = Array.isArray(listResponse?.messages)
+        ? listResponse.messages
+        : [];
+
+      console.log(
+        `[DataProvider] Gmail list returned ${messageRefs.length} messages.`,
+      );
+
+      /*
+       * Second request:
+       *
+       * GET /gmail/messages/{message_id}
+       *
+       * Fetch complete Gmail message information.
+       */
+      const fullMessages = await Promise.all(
+        messageRefs.map(async (item) => {
+          if (!item?.id) {
+            return null;
+          }
+
+          try {
+            const response = await apiFetch(
+              `/gmail/messages/${encodeURIComponent(item.id)}`,
+            );
+
+            return normalizeGmailMessage(response);
+          } catch (error) {
+            console.error(
+              `[DataProvider] Failed to load Gmail message ${item.id}:`,
+              error,
+            );
+
+            return null;
+          }
+        }),
+      );
+
+      const emails = fullMessages.filter(Boolean);
+
+      /*
+       * Replace the frontend email collection
+       * with the real Gmail records.
+       *
+       * IMPORTANT:
+       * The reducer already supports backend/sync.
+       */
+      if (emails.length > 0) {
+        dispatch({
+          type: "backend/sync",
+          emails,
+        });
+      }
+
+      setBackendConnected(true);
+
+      console.log(`[DataProvider] Loaded ${emails.length} Gmail messages.`);
+
+      return emails;
+    } catch (error) {
+      console.error("[DataProvider] Gmail backend load failed:", error);
+
+      setBackendConnected(false);
+
+      setBackendError(error);
+
+      return [];
+    } finally {
+      setBackendLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadGmailMessages();
+  }, [loadGmailMessages]);
+
+  /* ==========================================================
+     EMAIL ACTIONS
+     ========================================================== */
 
   const emailById = useCallback(
-    (id) => state.emails.find((email) => email.id === id),
+    (id) =>
+      state.emails.find(
+        (email) => email.id === id || email.gmailMessageId === id,
+      ),
     [state.emails],
   );
 
@@ -82,7 +529,10 @@ export function DataProvider({ children }) {
     (id) => {
       const email = emailById(id);
 
-      dispatch({ type: "email/toggleStar", id });
+      dispatch({
+        type: "email/toggleStar",
+        id,
+      });
 
       push({
         title: email?.starred ? "Star removed" : "Message starred",
@@ -94,16 +544,21 @@ export function DataProvider({ children }) {
     [emailById, push],
   );
 
-  const setRead = useCallback(
-    (id, read) => {
-      dispatch({ type: "email/setRead", id, read });
-    },
-    [],
-  );
+  const setRead = useCallback((id, read) => {
+    dispatch({
+      type: "email/setRead",
+      id,
+      read,
+    });
+  }, []);
 
   const archiveEmails = useCallback(
     (ids) => {
-      dispatch({ type: "email/setArchived", ids, archived: true });
+      dispatch({
+        type: "email/setArchived",
+        ids,
+        archived: true,
+      });
 
       push({
         title: `${ids.length} message${ids.length === 1 ? "" : "s"} archived`,
@@ -112,7 +567,11 @@ export function DataProvider({ children }) {
         action: {
           label: "Undo",
           onClick: () =>
-            dispatch({ type: "email/setArchived", ids, archived: false }),
+            dispatch({
+              type: "email/setArchived",
+              ids,
+              archived: false,
+            }),
         },
       });
     },
@@ -121,7 +580,11 @@ export function DataProvider({ children }) {
 
   const unarchiveEmails = useCallback(
     (ids) => {
-      dispatch({ type: "email/setArchived", ids, archived: false });
+      dispatch({
+        type: "email/setArchived",
+        ids,
+        archived: false,
+      });
 
       push({
         title: `${ids.length} message${ids.length === 1 ? "" : "s"} restored`,
@@ -135,7 +598,11 @@ export function DataProvider({ children }) {
 
   const deleteEmails = useCallback(
     (ids) => {
-      dispatch({ type: "email/setDeleted", ids, deleted: true });
+      dispatch({
+        type: "email/setDeleted",
+        ids,
+        deleted: true,
+      });
 
       push({
         title: `${ids.length} message${ids.length === 1 ? "" : "s"} deleted`,
@@ -145,7 +612,11 @@ export function DataProvider({ children }) {
         action: {
           label: "Undo",
           onClick: () =>
-            dispatch({ type: "email/setDeleted", ids, deleted: false }),
+            dispatch({
+              type: "email/setDeleted",
+              ids,
+              deleted: false,
+            }),
         },
       });
     },
@@ -154,7 +625,11 @@ export function DataProvider({ children }) {
 
   const restoreEmails = useCallback(
     (ids) => {
-      dispatch({ type: "email/setDeleted", ids, deleted: false });
+      dispatch({
+        type: "email/setDeleted",
+        ids,
+        deleted: false,
+      });
 
       push({
         title: `${ids.length} message${ids.length === 1 ? "" : "s"} recovered`,
@@ -168,7 +643,11 @@ export function DataProvider({ children }) {
 
   const markRead = useCallback(
     (ids, read) => {
-      dispatch({ type: "email/setRoutine", ids, read });
+      dispatch({
+        type: "email/setRoutine",
+        ids,
+        read,
+      });
 
       push({
         title: `Marked ${ids.length} as ${read ? "read" : "unread"}`,
@@ -186,11 +665,17 @@ export function DataProvider({ children }) {
         caseId: emailById(id)?.caseId ?? null,
       }));
 
-      dispatch({ type: "email/assignCase", ids, caseId });
+      dispatch({
+        type: "email/assignCase",
+        ids,
+        caseId,
+      });
 
       push({
         title: caseId ? `Added to ${caseId}` : "Removed from case",
-        description: `${ids.length} message${ids.length === 1 ? "" : "s"} updated.`,
+        description: `${ids.length} message${
+          ids.length === 1 ? "" : "s"
+        } updated.`,
         tone: "accent",
         action: {
           label: "Undo",
@@ -209,11 +694,16 @@ export function DataProvider({ children }) {
     [emailById, push],
   );
 
-  /* ---------------- Investigation actions ---------------- */
+  /* ==========================================================
+     INVESTIGATION ACTIONS
+     ========================================================== */
 
   const createCase = useCallback(
     (draft) => {
-      dispatch({ type: "case/create", ...draft });
+      dispatch({
+        type: "case/create",
+        ...draft,
+      });
 
       push({
         title: "Investigation opened",
@@ -226,9 +716,17 @@ export function DataProvider({ children }) {
 
   const updateCase = useCallback(
     (id, change) => {
-      dispatch({ type: "case/update", id, change });
+      dispatch({
+        type: "case/update",
+        id,
+        change,
+      });
 
-      push({ title: `${id} updated`, tone: "safe", duration: 3000 });
+      push({
+        title: `${id} updated`,
+        tone: "safe",
+        duration: 3000,
+      });
     },
     [push],
   );
@@ -237,7 +735,11 @@ export function DataProvider({ children }) {
     (id, nextState) => {
       const previous = state.investigations.find((item) => item.id === id);
 
-      dispatch({ type: "case/setState", id, state: nextState });
+      dispatch({
+        type: "case/setState",
+        id,
+        state: nextState,
+      });
 
       push({
         title: `${id} — ${nextState}`,
@@ -266,7 +768,10 @@ export function DataProvider({ children }) {
     (id) => {
       const item = state.investigations.find((entry) => entry.id === id);
 
-      dispatch({ type: "case/delete", id });
+      dispatch({
+        type: "case/delete",
+        id,
+      });
 
       push({
         title: `${id} deleted`,
@@ -275,7 +780,11 @@ export function DataProvider({ children }) {
         action: item
           ? {
               label: "Undo",
-              onClick: () => dispatch({ type: "case/restore", item }),
+              onClick: () =>
+                dispatch({
+                  type: "case/restore",
+                  item,
+                }),
             }
           : undefined,
       });
@@ -283,7 +792,9 @@ export function DataProvider({ children }) {
     [state.investigations, push],
   );
 
-  /* ---------------- Indicator actions ---------------- */
+  /* ==========================================================
+     INDICATOR ACTIONS
+     ========================================================== */
 
   const createIndicator = useCallback(
     (draft) => {
@@ -301,7 +812,10 @@ export function DataProvider({ children }) {
         return false;
       }
 
-      dispatch({ type: "indicator/create", ...draft });
+      dispatch({
+        type: "indicator/create",
+        ...draft,
+      });
 
       push({
         title: "Indicator registered",
@@ -314,23 +828,18 @@ export function DataProvider({ children }) {
     [state.indicators, push],
   );
 
-  /**
-   * Enrichment is the one operation with a deliberate delay.
-   *
-   * In a real deployment this is several network round trips (DNS, RDAP,
-   * reputation), so showing progress is honest rather than theatrical — and it
-   * is the only way the verdict could ever move off `unknown`.
-   */
   const enrichIndicator = useCallback(
     async (value) => {
-      dispatch({ type: "indicator/setEnriching", value, enriching: true });
+      dispatch({
+        type: "indicator/setEnriching",
+        value,
+        enriching: true,
+      });
 
       await new Promise((resolve) => setTimeout(resolve, 900));
 
       const indicator = state.indicators.find((item) => item.value === value);
 
-      // Derive a verdict from what the registry already knows, rather than
-      // inventing one at random.
       const verdict =
         indicator?.cases?.length > 1
           ? "malicious"
@@ -338,15 +847,24 @@ export function DataProvider({ children }) {
             ? "suspicious"
             : "unknown";
 
-      dispatch({ type: "indicator/setVerdict", value, verdict });
+      dispatch({
+        type: "indicator/setVerdict",
+        value,
+        verdict,
+      });
 
       push({
-        title: `Enrichment complete`,
+        title: "Enrichment complete",
         description:
           verdict === "unknown"
             ? `${value} remains unknown — no corroborating sighting.`
             : `${value} assessed as ${verdict}.`,
-        tone: verdict === "malicious" ? "critical" : verdict === "suspicious" ? "warn" : "info",
+        tone:
+          verdict === "malicious"
+            ? "critical"
+            : verdict === "suspicious"
+              ? "warn"
+              : "info",
       });
     },
     [state.indicators, push],
@@ -356,7 +874,11 @@ export function DataProvider({ children }) {
     (value, verdict) => {
       const previous = state.indicators.find((item) => item.value === value);
 
-      dispatch({ type: "indicator/setVerdict", value, verdict });
+      dispatch({
+        type: "indicator/setVerdict",
+        value,
+        verdict,
+      });
 
       push({
         title: `Verdict set to ${verdict}`,
@@ -382,7 +904,10 @@ export function DataProvider({ children }) {
     (value) => {
       const item = state.indicators.find((entry) => entry.value === value);
 
-      dispatch({ type: "indicator/delete", value });
+      dispatch({
+        type: "indicator/delete",
+        value,
+      });
 
       push({
         title: "Indicator removed",
@@ -391,7 +916,11 @@ export function DataProvider({ children }) {
         action: item
           ? {
               label: "Undo",
-              onClick: () => dispatch({ type: "indicator/restore", item }),
+              onClick: () =>
+                dispatch({
+                  type: "indicator/restore",
+                  item,
+                }),
             }
           : undefined,
       });
@@ -399,11 +928,16 @@ export function DataProvider({ children }) {
     [state.indicators, push],
   );
 
-  /* ---------------- Report actions ---------------- */
+  /* ==========================================================
+     REPORT ACTIONS
+     ========================================================== */
 
   const createReport = useCallback(
     (draft) => {
-      dispatch({ type: "report/create", ...draft });
+      dispatch({
+        type: "report/create",
+        ...draft,
+      });
 
       push({
         title: "Report generated",
@@ -416,7 +950,10 @@ export function DataProvider({ children }) {
 
   const finalizeReport = useCallback(
     (id) => {
-      dispatch({ type: "report/finalize", id });
+      dispatch({
+        type: "report/finalize",
+        id,
+      });
 
       push({
         title: `${id} finalised`,
@@ -431,7 +968,10 @@ export function DataProvider({ children }) {
     (id) => {
       const item = state.reports.find((entry) => entry.id === id);
 
-      dispatch({ type: "report/delete", id });
+      dispatch({
+        type: "report/delete",
+        id,
+      });
 
       push({
         title: `${id} deleted`,
@@ -439,7 +979,11 @@ export function DataProvider({ children }) {
         action: item
           ? {
               label: "Undo",
-              onClick: () => dispatch({ type: "report/restore", item }),
+              onClick: () =>
+                dispatch({
+                  type: "report/restore",
+                  item,
+                }),
             }
           : undefined,
       });
@@ -447,15 +991,24 @@ export function DataProvider({ children }) {
     [state.reports, push],
   );
 
-  /* ---------------- Settings actions ---------------- */
+  /* ==========================================================
+     SETTINGS
+     ========================================================== */
 
   const setSetting = useCallback((key, value) => {
-    dispatch({ type: "settings/set", key, value });
+    dispatch({
+      type: "settings/set",
+      key,
+      value,
+    });
   }, []);
 
   const saveSettings = useCallback(
     (settings) => {
-      dispatch({ type: "settings/replace", settings });
+      dispatch({
+        type: "settings/replace",
+        settings,
+      });
 
       push({
         title: "Settings saved",
@@ -467,13 +1020,20 @@ export function DataProvider({ children }) {
   );
 
   const resetSettings = useCallback(() => {
-    dispatch({ type: "settings/reset" });
+    dispatch({
+      type: "settings/reset",
+    });
 
-    push({ title: "Settings restored to defaults", tone: "info" });
+    push({
+      title: "Settings restored to defaults",
+      tone: "info",
+    });
   }, [push]);
 
   const resetAll = useCallback(() => {
-    dispatch({ type: "state/reset" });
+    dispatch({
+      type: "state/reset",
+    });
 
     try {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -488,59 +1048,125 @@ export function DataProvider({ children }) {
     });
   }, [push]);
 
+  /* ==========================================================
+     CONTEXT
+     ========================================================== */
+
   const value = useMemo(
     () => ({
       ...state,
+
+      backendLoading,
+
+      backendError,
+
+      backendConnected,
+
+      refreshGmail: loadGmailMessages,
+
       actions: {
         toggleStar,
+
         setRead,
+
         archiveEmails,
+
         unarchiveEmails,
+
         deleteEmails,
+
         restoreEmails,
+
         markRead,
+
         assignCase,
+
         createCase,
+
         updateCase,
+
         setCaseState,
+
         deleteCase,
+
         createIndicator,
+
         enrichIndicator,
+
         setIndicatorVerdict,
+
         deleteIndicator,
+
         createReport,
+
         finalizeReport,
+
         deleteReport,
+
         setSetting,
+
         saveSettings,
+
         resetSettings,
+
         resetAll,
       },
     }),
     [
       state,
+
+      backendLoading,
+
+      backendError,
+
+      backendConnected,
+
+      loadGmailMessages,
+
       toggleStar,
+
       setRead,
+
       archiveEmails,
+
       unarchiveEmails,
+
       deleteEmails,
+
       restoreEmails,
+
       markRead,
+
       assignCase,
+
       createCase,
+
       updateCase,
+
       setCaseState,
+
       deleteCase,
+
       createIndicator,
+
       enrichIndicator,
+
       setIndicatorVerdict,
+
       deleteIndicator,
+
       createReport,
+
       finalizeReport,
+
       deleteReport,
+
       setSetting,
+
       saveSettings,
+
       resetSettings,
+
       resetAll,
     ],
   );

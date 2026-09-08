@@ -287,7 +287,20 @@ export function AttachmentPanel({ attachments = [], className }) {
 }
 
 /** The rendered message body, presented as quoted evidence. */
+/** The rendered message body, presented as quoted evidence. */
 export function MessagePanel({ email, className }) {
+  const body =
+    typeof email?.body === "string"
+      ? email.body
+      : email?.body?.text ||
+        email?.body?.paragraphs?.join("\n\n") ||
+        "";
+
+  const paragraphs = body
+    .split(/\r?\n\s*\r?\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
   return (
     <Card className={cn("p-5", className)}>
       <CardHeader
@@ -297,24 +310,24 @@ export function MessagePanel({ email, className }) {
       />
 
       <div className="mt-5 rounded-lg border border-line bg-canvas p-4">
-        <p className="text-sm text-ink-soft">{email.body.greeting}</p>
-
-        {email.body.paragraphs.map((paragraph) => (
-          <p key={paragraph} className="mt-3 text-sm leading-7 text-ink-soft">
-            {paragraph}
+        {paragraphs.length > 0 ? (
+          paragraphs.map((paragraph, index) => (
+            <p
+              key={`${index}-${paragraph.slice(0, 40)}`}
+              className={cn(
+                "text-sm leading-7 text-ink-soft",
+                index > 0 && "mt-3",
+              )}
+            >
+              {paragraph}
+            </p>
+          ))
+        ) : (
+          <p className="text-sm text-ink-muted">
+            No message body available.
           </p>
-        ))}
+        )}
       </div>
-
-      {email.body.action && (
-        <p className="mt-4 flex items-start gap-2 rounded-lg border border-warn/20 bg-warn/[0.06] p-3 text-[11px] leading-5 text-ink-soft">
-          <Icon name="warning" className="mt-0.5 shrink-0 text-warn" />
-          <span>
-            <strong className="font-semibold text-warn">Analyst note. </strong>
-            {email.body.action}
-          </span>
-        </p>
-      )}
     </Card>
   );
 }

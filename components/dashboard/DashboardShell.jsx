@@ -5,11 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils/cn";
-import {
-  site,
-  dashboardNav,
-  dashboardUtilityNav,
-} from "@/lib/data/site";
+import { site, dashboardNav, dashboardUtilityNav } from "@/lib/data/site";
 import { emails } from "@/lib/data/emails";
 import { riskTone } from "@/lib/utils/risk";
 import { initials } from "@/lib/utils/format";
@@ -87,9 +83,7 @@ export function DashboardShell({ children, user }) {
     pathname === href ||
     (href !== "/dashboard" && pathname.startsWith(`${href}/`));
 
-  const alerts = emails
-    .filter((email) => email.risk >= 75)
-    .slice(0, 4);
+  const alerts = emails.filter((email) => email.risk >= 75).slice(0, 4);
 
   return (
     <div className="min-h-dvh bg-canvas">
@@ -111,7 +105,10 @@ export function DashboardShell({ children, user }) {
           />
 
           {/* Brand */}
-          <Link href="/dashboard" className="group flex shrink-0 items-center gap-3">
+          <Link
+            href="/dashboard"
+            className="group flex shrink-0 items-center gap-3"
+          >
             <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-accent/25 bg-accent/10 text-accent transition duration-200 group-hover:border-accent/50">
               <Icon name="shield" />
             </span>
@@ -366,7 +363,9 @@ function SidebarBody({ isActive }) {
                 name={item.icon}
                 className={cn(
                   "w-4 shrink-0 transition duration-200",
-                  active ? "text-accent" : "text-ink-faint group-hover:text-accent",
+                  active
+                    ? "text-accent"
+                    : "text-ink-faint group-hover:text-accent",
                 )}
               />
 
