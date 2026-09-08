@@ -1,8 +1,10 @@
 import Link from "next/link";
 
-import { DEMO_CREDENTIALS } from "@/lib/auth/users";
+import { SEEDED_ACCOUNTS } from "@/lib/auth/users";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { GoogleButton } from "@/components/auth/GoogleButton";
+import { AuthDivider } from "@/components/auth/AuthDivider";
 
 export const metadata = {
   title: "Sign in",
@@ -39,7 +41,30 @@ export default async function LoginPage({ searchParams }) {
         </>
       }
     >
-      <LoginForm next={next} demo={DEMO_CREDENTIALS} />
+      {/*
+        Google is the backend's real authentication path (GET /auth/google).
+        The password form below it works against the local store, which is what
+        makes the console openable with no backend running.
+      */}
+      <GoogleButton label="Sign in with Google" />
+
+      <AuthDivider />
+
+      {/*
+        Only the display fields are passed through, not the whole record — the
+        seeded objects also carry an id and role the form has no use for.
+      */}
+      <LoginForm
+        next={next}
+        accounts={SEEDED_ACCOUNTS.map(
+          ({ email, password, label, description }) => ({
+            email,
+            password,
+            label,
+            description,
+          }),
+        )}
+      />
     </AuthShell>
   );
 }

@@ -159,7 +159,7 @@ describe("email transitions", () => {
 
   it("assigns a case and recounts rather than incrementing", () => {
     const base = initialState();
-    const caseId = base.investigations[0].id;
+    const caseId = base.investigations[0].case_id;
     const ids = base.emails.slice(0, 2).map((email) => email.id);
 
     // Assigning the same messages twice must not inflate the count.
@@ -167,14 +167,14 @@ describe("email transitions", () => {
     const twice = reducer(once, { type: "email/assignCase", ids, caseId });
 
     const linked = twice.emails.filter((email) => email.caseId === caseId);
-    const record = twice.investigations.find((item) => item.id === caseId);
+    const record = twice.investigations.find((item) => item.case_id === caseId);
 
     expect(record.emails).toBe(linked.length);
   });
 
   it("detaches messages when their case is deleted", () => {
     const base = initialState();
-    const caseId = base.investigations[0].id;
+    const caseId = base.investigations[0].case_id;
 
     const state = run(
       [
@@ -199,7 +199,7 @@ describe("investigation transitions", () => {
     const state = reducer(initialState(), {
       type: "case/create",
       title: "New supplier impersonation",
-      summary: "A look-alike domain is requesting invoice payment.",
+      description: "A look-alike domain is requesting invoice payment.",
       analyst: "SOC Analyst",
       priority: "high",
       risk: 70,
@@ -207,15 +207,15 @@ describe("investigation transitions", () => {
 
     const created = state.investigations[0];
 
-    expect(created.id).toMatch(/^IR-\d{4}-\d{3}$/);
-    expect(created.state).toBe("Active");
+    expect(created.case_id).toMatch(/^IR-\d{4}-\d{3}$/);
+    expect(created.status).toBe("active");
     expect(created.emails).toBe(0);
     expect(openInvestigations(state)).toContainEqual(created);
   });
 
   it("updates a case and stamps it as touched", () => {
     const base = initialState();
-    const id = base.investigations[0].id;
+    const id = base.investigations[0].case_id;
 
     const state = reducer(base, {
       type: "case/update",
@@ -223,7 +223,7 @@ describe("investigation transitions", () => {
       change: { title: "Renamed case", risk: 55 },
     });
 
-    const updated = state.investigations.find((item) => item.id === id);
+    const updated = state.investigations.find((item) => item.case_id === id);
 
     expect(updated.title).toBe("Renamed case");
     expect(updated.risk).toBe(55);
@@ -232,28 +232,28 @@ describe("investigation transitions", () => {
 
   it("moves a case between states", () => {
     const base = initialState();
-    const id = base.investigations[0].id;
+    const id = base.investigations[0].case_id;
 
     const closed = reducer(base, {
-      type: "case/setState",
+      type: "case/setStatus",
       id,
-      state: "Closed",
+      status: "closed",
     });
 
-    expect(openInvestigations(closed).map((i) => i.id)).not.toContain(id);
+    expect(openInvestigations(closed).map((i) => i.case_id)).not.toContain(id);
   });
 
   it("deletes and restores a case", () => {
     const base = initialState();
     const target = base.investigations[0];
 
-    const deleted = reducer(base, { type: "case/delete", id: target.id });
+    const deleted = reducer(base, { type: "case/delete", id: target.case_id });
 
-    expect(deleted.investigations.map((i) => i.id)).not.toContain(target.id);
+    expect(deleted.investigations.map((i) => i.case_id)).not.toContain(target.case_id);
 
     const restored = reducer(deleted, { type: "case/restore", item: target });
 
-    expect(restored.investigations.map((i) => i.id)).toContain(target.id);
+    expect(restored.investigations.map((i) => i.case_id)).toContain(target.case_id);
   });
 });
 

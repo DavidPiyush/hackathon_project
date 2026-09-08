@@ -402,11 +402,11 @@ export function InboxClient() {
 
                       <ul className="max-h-64 overflow-y-auto p-2">
                         {openCases.map((item) => (
-                          <li key={item.id}>
+                          <li key={item.case_id}>
                             <button
                               type="button"
                               onClick={() =>
-                                runBulk((ids) => actions.assignCase(ids, item.id))
+                                runBulk((ids) => actions.assignCase(ids, item.case_id))
                               }
                               className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition duration-200 hover:bg-raise-md"
                             >
@@ -556,15 +556,15 @@ export function InboxClient() {
 
                 <ul className="max-h-64 overflow-y-auto p-2">
                   {openCases.map((item) => (
-                    <li key={item.id}>
+                    <li key={item.case_id}>
                       <button
                         type="button"
                         onClick={() =>
-                          actions.assignCase([openEmail.id], item.id)
+                          actions.assignCase([openEmail.id], item.case_id)
                         }
                         className={cn(
                           "flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition duration-200 hover:bg-raise-md",
-                          openEmail.caseId === item.id && "bg-accent/10",
+                          openEmail.caseId === item.case_id && "bg-accent/10",
                         )}
                       >
                         <span className="ioc shrink-0 text-accent">
@@ -575,7 +575,7 @@ export function InboxClient() {
                           {item.title}
                         </span>
 
-                        {openEmail.caseId === item.id && (
+                        {openEmail.caseId === item.case_id && (
                           <Icon name="check" className="shrink-0 text-accent" />
                         )}
                       </button>

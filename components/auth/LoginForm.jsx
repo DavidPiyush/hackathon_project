@@ -18,7 +18,7 @@ const INITIAL = { status: "idle", message: "", errors: {}, values: {} };
  * only ever renders the idle or error state — there is no success branch to
  * get out of sync.
  */
-export function LoginForm({ next, demo }) {
+export function LoginForm({ next, accounts = [] }) {
   const [state, formAction, pending] = useActionState(loginAction, INITIAL);
 
   const [email, setEmail] = useState("");
@@ -26,10 +26,15 @@ export function LoginForm({ next, demo }) {
 
   const { errors = {}, values = {} } = state;
 
-  /** Fill the demo credentials in rather than making people retype them. */
-  const useDemo = () => {
-    setEmail(demo.email);
-    setPassword(demo.password);
+  /**
+   * Fill a demo account in rather than making people retype it.
+   *
+   * Deliberately not named `useAccount` — a `use` prefix reads as a React hook
+   * to both the linter and the next person to open this file.
+   */
+  const fillAccount = (account) => {
+    setEmail(account.email);
+    setPassword(account.password);
   };
 
   return (
@@ -108,39 +113,59 @@ export function LoginForm({ next, demo }) {
         {pending ? "Signing in…" : "Sign in"}
       </Button>
 
-      {/* Demo credentials, so the console can be opened without signing up */}
-      {demo && (
+      {/* Seeded accounts, so the console can be opened without signing up */}
+      {accounts.length > 0 && (
         <div className="rounded-lg border border-accent/20 bg-accent/[0.05] p-4">
           <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-accent">
             <Icon name="key" className="text-[10px]" />
-            Demo account
+            Demo accounts
           </p>
 
-          <dl className="mt-3 space-y-1.5">
-            {[
-              { label: "Email", value: demo.email },
-              { label: "Password", value: demo.password },
-            ].map((item) => (
-              <div key={item.label} className="flex items-baseline gap-2">
-                <dt className="w-16 shrink-0 text-[10px] uppercase tracking-wider text-ink-faint">
-                  {item.label}
-                </dt>
-                <dd className="ioc text-ink-soft">{item.value}</dd>
-              </div>
-            ))}
-          </dl>
+          <ul className="mt-3 space-y-3">
+            {accounts.map((account) => (
+              <li
+                key={account.email}
+                className="rounded-lg border border-line bg-surface/60 p-3"
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="text-xs font-semibold text-ink">
+                    {account.label}
+                  </p>
 
-          <button
-            type="button"
-            onClick={useDemo}
-            className={cn(
-              "mt-3 inline-flex items-center gap-1.5 text-[11px] font-semibold text-accent",
-              "underline decoration-accent/40 underline-offset-2 transition hover:decoration-accent",
-            )}
-          >
-            <Icon name="check" className="text-[9px]" />
-            Fill these in
-          </button>
+                  <button
+                    type="button"
+                    onClick={() => fillAccount(account)}
+                    className={cn(
+                      "shrink-0 text-[11px] font-semibold text-accent",
+                      "underline decoration-accent/40 underline-offset-2 transition hover:decoration-accent",
+                    )}
+                  >
+                    Use this
+                  </button>
+                </div>
+
+                <p className="mt-1 text-[10px] leading-4 text-ink-muted">
+                  {account.description}
+                </p>
+
+                <dl className="mt-2 space-y-1">
+                  <div className="flex items-baseline gap-2">
+                    <dt className="w-14 shrink-0 text-[10px] uppercase tracking-wider text-ink-faint">
+                      Email
+                    </dt>
+                    <dd className="ioc text-ink-soft">{account.email}</dd>
+                  </div>
+
+                  <div className="flex items-baseline gap-2">
+                    <dt className="w-14 shrink-0 text-[10px] uppercase tracking-wider text-ink-faint">
+                      Password
+                    </dt>
+                    <dd className="ioc text-ink-soft">{account.password}</dd>
+                  </div>
+                </dl>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </form>

@@ -8,6 +8,7 @@ import { ReportsClient } from "@/components/dashboard/ReportsClient";
 import { SettingsPanels } from "@/components/dashboard/SettingsPanels";
 import { OverviewClient } from "@/components/dashboard/OverviewClient";
 import { investigations, indicatorRegistry, reports } from "@/lib/data/dashboard";
+import { STATUS_LABELS } from "@/lib/api/schema";
 import { renderWithProviders } from "./helpers/render";
 
 /**
@@ -15,6 +16,15 @@ import { renderWithProviders } from "./helpers/render";
  * ("Monitoring", "malicious"). Pills carry `aria-pressed` and row triggers
  * carry `aria-expanded`; a menu item has neither.
  */
+/**
+ * Type without the simulated per-keystroke delay.
+ *
+ * The delay models human typing, which none of these assertions care about,
+ * and long field values push the test past the timeout when suites run in
+ * parallel.
+ */
+const type = (element, text) => userEvent.type(element, text, { delay: null });
+
 const menuItem = (name) =>
   screen
     .getAllByRole("button", { name })
@@ -45,7 +55,7 @@ describe("investigations", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Open" }));
 
-    const closed = investigations.filter((item) => item.state === "Closed");
+    const closed = investigations.filter((item) => item.status === "closed");
 
     for (const item of closed) {
       expect(screen.queryByText(item.title)).not.toBeInTheDocument();
@@ -85,13 +95,13 @@ describe("investigations", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /open a case/i }));
 
-    await userEvent.type(
+    await type(
       screen.getByLabelText(/^Title/),
       "Supplier portal credential theft",
     );
 
-    await userEvent.type(
-      screen.getByLabelText(/^Summary/),
+    await type(
+      screen.getByLabelText(/^Description/),
       "A cloned supplier portal is harvesting credentials from the finance team.",
     );
 
@@ -111,12 +121,12 @@ describe("investigations", () => {
     const target = investigations[0];
 
     await userEvent.click(
-      screen.getByRole("button", { name: `Edit ${target.id}` }),
+      screen.getByRole("button", { name: `Edit ${target.case_id}` }),
     );
 
     const title = screen.getByLabelText(/^Title/);
     await userEvent.clear(title);
-    await userEvent.type(title, "Renamed investigation");
+    await type(title, "Renamed investigation");
 
     await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
@@ -127,17 +137,17 @@ describe("investigations", () => {
   it("moves a case to another state", async () => {
     renderWithProviders(<InvestigationsClient />);
 
-    const target = investigations.find((item) => item.state === "Active");
+    const target = investigations.find((item) => item.status === "active");
 
     await userEvent.click(
       screen.getByRole("button", {
-        name: `Change state for ${target.id} — currently ${target.state}`,
+        name: `Change state for ${target.case_id} — currently ${STATUS_LABELS[target.status]}`,
       }),
     );
 
     await userEvent.click(menuItem("Monitoring"));
 
-    expect(screen.getByText(`${target.id} — Monitoring`)).toBeInTheDocument();
+    expect(screen.getByText(`${target.case_id} — Monitoring`)).toBeInTheDocument();
   });
 
   it("requires confirmation before deleting a case", async () => {
@@ -146,7 +156,7 @@ describe("investigations", () => {
     const target = investigations[0];
 
     await userEvent.click(
-      screen.getByRole("button", { name: `Delete ${target.id}` }),
+      screen.getByRole("button", { name: `Delete ${target.case_id}` }),
     );
 
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
@@ -165,10 +175,10 @@ describe("investigations", () => {
     renderWithProviders(<InvestigationsClient />);
 
     const openBefore = investigations.filter(
-      (item) => item.state !== "Closed",
+      (item) => item.status !== "closed",
     ).length;
 
-    const tile = screen.getByText("Open cases").closest("div").parentElement;
+    const tile = screen.getByText("Open cases").closest("dl");
 
     expect(within(tile).getByText(String(openBefore))).toBeInTheDocument();
 
@@ -176,7 +186,7 @@ describe("investigations", () => {
 
     await userEvent.click(
       screen.getByRole("button", {
-        name: `Change state for ${first.id} — currently ${first.state}`,
+        name: `Change state for ${first.case_id} — currently ${STATUS_LABELS[first.status]}`,
       }),
     );
     await userEvent.click(menuItem("Closed"));
@@ -211,10 +221,7 @@ describe("indicator registry", () => {
       screen.getAllByRole("button", { name: /add indicator/i })[0],
     );
 
-    await userEvent.type(
-      screen.getByLabelText(/^Indicator/),
-      "fresh-typosquat.example",
-    );
+    await type(screen.getByLabelText(/^Indicator/), "fresh-typosquat.example");
 
     await userEvent.click(
       screen.getByRole("button", { name: /register indicator/i }),
@@ -475,7 +482,7 @@ describe("overview", () => {
     expect(screen.getByText("Triage queue")).toBeInTheDocument();
     // "Open investigations" is both a stat label and a button, so match the tile.
     expect(
-      screen.getByText("Open investigations", { selector: "p" }),
+      screen.getByText("Open investigations", { selector: "dt" }),
     ).toBeInTheDocument();
   });
 

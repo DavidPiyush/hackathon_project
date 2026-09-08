@@ -40,7 +40,7 @@ export function OverviewClient() {
   const analysed = threatTrend.reduce((total, day) => total + day.total, 0);
   const highRisk = live.filter((email) => email.risk >= 75).length;
   const reviewQueue = live.filter((email) => needsReview(email.risk)).length;
-  const openCases = investigations.filter((item) => item.state !== "Closed");
+  const openCases = investigations.filter((item) => item.status !== "closed");
   const bands = summarizeRisk(live);
 
   const triage = [...live].sort((a, b) => b.risk - a.risk).slice(0, 5);
@@ -283,7 +283,7 @@ export function OverviewClient() {
                 icon="folder"
                 iconTone="critical"
                 title="Leading investigation"
-                subtitle={topCase.id}
+                subtitle={topCase.case_id}
                 level={2}
               />
 
@@ -292,7 +292,7 @@ export function OverviewClient() {
               </p>
 
               <p className="mt-2 text-xs leading-6 text-ink-soft">
-                {topCase.summary}
+                {topCase.description}
               </p>
 
               <RiskMeter score={topCase.risk} className="mt-5" />
@@ -302,10 +302,10 @@ export function OverviewClient() {
                   {
                     label: "Emails",
                     value: emails.filter(
-                      (email) => email.caseId === topCase.id && !email.deleted,
+                      (email) => email.caseId === topCase.case_id && !email.deleted,
                     ).length,
                   },
-                  { label: "Reports", value: reports.filter((r) => r.caseId === topCase.id).length },
+                  { label: "Reports", value: reports.filter((r) => r.case_id === topCase.case_id).length },
                   { label: "Updated", value: topCase.updated },
                 ].map((item) => (
                   <div

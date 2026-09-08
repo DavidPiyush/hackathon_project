@@ -4,8 +4,11 @@ An AI-assisted **email threat detection and forensic intelligence** platform. It
 messages, reconstructs the technical evidence behind them, correlates indicators across cases, and
 produces defensible investigation reports.
 
-Built with Next.js 16 (App Router), React 19 and Tailwind CSS v4. **Real authentication**, light
-and dark themes, full CRUD across every console module, and 470 tests.
+Built with Next.js 16 (App Router), React 19 and Tailwind CSS v4. Real authentication, light and
+dark themes, full CRUD across every console module, and 504 tests.
+
+The frontend's data model follows the **FastAPI backend's OpenAPI contract** — `case_id`,
+`description`, `status`, `notes` — so pointing it at a live API does not require renaming anything.
 
 ---
 
@@ -13,19 +16,30 @@ and dark themes, full CRUD across every console module, and 470 tests.
 
 ```bash
 npm install
-cp .env.example .env.local   # optional in dev, required in production
+cp .env.example .env.local   # SESSION_SECRET optional in dev, required in production
 npm run dev                  # http://localhost:3000
 ```
 
+### Connecting the backend
+
+Set `NEXT_PUBLIC_API_URL` to the FastAPI origin. With it set, **Continue with Google** points at
+`GET /auth/google` — the API's real authentication path — and `lib/api/client.js` can reach every
+documented endpoint. Without it, Google sign-in is disabled with an explanation and the console runs
+against its local demo store.
+
 ### Signing in
 
-The console is behind authentication. Either create an account at `/signup`, or use the seeded
-demo credentials shown on the sign-in page:
+Either create an account at `/signup`, or use one of the two seeded accounts, both listed on the
+sign-in page with a **Use this** button:
 
-```
-analyst@threatdetect.com
-evidence-first-2026
-```
+| Role | Email | Password |
+| --- | --- | --- |
+| Analyst | `analyst@threatdetect.com` | `evidence-first-2026` |
+| DFIR Lead | `lead@threatdetect.com` | `chain-of-custody-2026` |
+
+> The backend has **no password endpoint** — its only real authentication is Google OAuth. The
+> password path above is local to this frontend, which is what makes the console openable with no
+> backend running.
 
 | Script               | What it does                               |
 | -------------------- | ------------------------------------------ |
@@ -41,7 +55,8 @@ evidence-first-2026
 
 ## What actually works
 
-There is **no backend**, so it is worth being precise about which parts do real work.
+The backend is a separate FastAPI service. With `NEXT_PUBLIC_API_URL` unset the console runs
+self-contained, so it is worth being precise about which parts do real work either way.
 
 ### Real, working functionality
 
@@ -88,8 +103,12 @@ There is **no backend**, so it is worth being precise about which parts do real 
 
 The seed corpus (emails, investigations, indicators, reports) lives in `lib/data/`. Every derived
 figure — counts, distributions, severity bands, linked-evidence totals — is **computed from live
-store state**, so nothing on screen can contradict anything else. `/docs/api` documents an intended
-API contract; those endpoints are not deployed.
+store state**, so nothing on screen can contradict anything else.
+
+`/docs/api` documents the **real** FastAPI contract, generated from the same
+`lib/api/schema.js` the client uses — so the page cannot describe a route the client does not know
+about. Whether those endpoints answer depends on `NEXT_PUBLIC_API_URL` pointing at a running
+backend.
 
 ---
 
@@ -112,6 +131,7 @@ components/
   dashboard/                Console shell, evidence panels, CRUD islands
 
 lib/
+  api/                      schema (transcribed from OpenAPI) + HTTP client
   auth/                     password, session, users, dal, rate-limit, validation
   data/                     Pure seed data — no UI imports
   store/                    Reducer, selectors, theme store
@@ -154,6 +174,17 @@ deliberately the shape a database adapter would have — `findByEmail`, `findByI
 message rather than signing sessions with a value that is public in this repository — and rather
 than failing closed on every request, which would present as "login is broken".
 
+### Backend contract
+
+`lib/api/schema.js` is transcribed from the OpenAPI document: every endpoint, and every request
+body with its exact length limits. `lib/api/client.js` is the only place that talks HTTP — it sends
+`credentials: "include"` because the backend session is a cookie, validates request bodies locally
+so an over-long title never becomes a 422 the user has to decode, and maps FastAPI's
+`{ detail: [{ loc, msg }] }` onto the same per-field error shape the forms already render.
+
+The console's own seed data uses the API's field names rather than names an isolated frontend would
+have invented. `__tests__/api-contract.test.js` fails if the two drift apart.
+
 ### Single sources of truth
 
 Four choke points, each closing a class of bug:
@@ -173,7 +204,7 @@ Four choke points, each closing a class of bug:
 npm test
 ```
 
-**470 tests across 15 files.** Beyond ordinary coverage, the suite pins the specific defects this
+**504 tests across 16 files.** Beyond ordinary coverage, the suite pins the specific defects this
 codebase was rebuilt to fix, and the ones found while rebuilding it:
 
 - **`routes.test.js`** walks the real `app/` directory and asserts every internal `href` — in the
@@ -200,6 +231,9 @@ codebase was rebuilt to fix, and the ones found while rebuilding it:
   mode.
 - **`auth-forms.test.jsx`** covers labels, autocomplete hints, the reveal toggle, and the live
   strength meter.
+- **`api-contract.test.js`** asserts the seed data, the reducer and the client all still match the
+  OpenAPI document: `case_id` not `id`, `description` not `summary`, wire status values not display
+  labels, and every documented length limit.
 - **`parse-headers.test.js`** covers folded headers, CRLF, malformed input and out-of-range IPs.
 
 ---
@@ -257,6 +291,8 @@ Stated here for the same reason the product states them in its own UI:
   Settings → *Reset the console* clears it.
 - **Accounts live in server memory.** They are lost on restart and not shared between instances.
   Do not reuse a real password; the sign-in screen says so.
+- The **local password auth has no backend counterpart.** The API authenticates with Google OAuth
+  only, so a production deployment should use that path and treat the password form as demo-only.
 - There is **no password reset**, because there is no mail service. The link is deliberately inert
   rather than a dead end that looks like it works.
 - Sessions are stateless, so a single session cannot be revoked server-side before it expires —

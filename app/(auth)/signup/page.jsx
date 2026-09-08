@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { AuthShell } from "@/components/auth/AuthShell";
 import { SignupForm } from "@/components/auth/SignupForm";
+import { GoogleButton } from "@/components/auth/GoogleButton";
+import { AuthDivider } from "@/components/auth/AuthDivider";
 
 export const metadata = {
   title: "Create an account",
@@ -27,6 +29,10 @@ export default function SignupPage() {
         </>
       }
     >
+      <GoogleButton label="Sign up with Google" />
+
+      <AuthDivider />
+
       <SignupForm />
     </AuthShell>
   );

@@ -237,6 +237,34 @@ describe("session cookie", () => {
 /* ============================ USER STORE ============================ */
 
 describe("user store", () => {
+  it("resolves the demo account when two requests arrive together", async () => {
+    /*
+      Regression: seeding used to set a boolean flag *before* awaiting the
+      password hash. Hashing takes ~100ms by design, so a second caller inside
+      that window saw the flag set and returned to an empty store — a correct
+      password was rejected as "Incorrect email or password". The proxy and the
+      page render hit this together on the very first request, so sign-in
+      failed exactly when it mattered.
+    */
+    const [a, b] = await Promise.all([
+      findByEmail(DEMO_CREDENTIALS.email),
+      findByEmail(DEMO_CREDENTIALS.email),
+    ]);
+
+    expect(a, "first concurrent lookup").not.toBeNull();
+    expect(b, "second concurrent lookup").not.toBeNull();
+  });
+
+  it("signs in when two requests arrive together", async () => {
+    const [a, b] = await Promise.all([
+      verifyCredentials(DEMO_CREDENTIALS.email, DEMO_CREDENTIALS.password),
+      verifyCredentials(DEMO_CREDENTIALS.email, DEMO_CREDENTIALS.password),
+    ]);
+
+    expect(a, "first concurrent sign-in").not.toBeNull();
+    expect(b, "second concurrent sign-in").not.toBeNull();
+  });
+
   it("seeds the demo account on first lookup", async () => {
     const user = await findByEmail(DEMO_CREDENTIALS.email);
 

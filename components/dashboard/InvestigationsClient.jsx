@@ -4,24 +4,27 @@ import { useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils/cn";
 import { tone as resolveTone } from "@/lib/utils/tones";
-import { riskTone, clampScore } from "@/lib/utils/risk";
+import { riskTone } from "@/lib/utils/risk";
+import { STATUSES, STATUS_LABELS } from "@/lib/api/schema";
 import { useData } from "@/components/providers/DataProvider";
 import { Icon } from "@/components/ui/Icon";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Card, CardHeader, EmptyState } from "@/components/ui/Card";
 import { Badge, RiskBadge, StatusDot } from "@/components/ui/Badge";
 import { StatCard, Meter } from "@/components/ui/DataDisplay";
-import { Field, Input, Select, Textarea, SearchInput } from "@/components/ui/Form";
+import { SearchInput } from "@/components/ui/Form";
 import { FilterPills } from "@/components/ui/Interactive";
 import { Popover } from "@/components/ui/Popover";
-import { Modal } from "@/components/ui/Modal";
 import { ConfirmInline } from "@/components/ui/Feedback";
+import { CaseFormModal } from "@/components/dashboard/CaseFormModal";
 
-const STATE_TONES = {
-  Active: "critical",
-  "Pending Review": "warn",
-  Monitoring: "info",
-  Closed: "safe",
+/** Tones keyed by the wire status values from the API contract. */
+const STATUS_TONES = {
+  open: "info",
+  active: "critical",
+  pending_review: "warn",
+  monitoring: "info",
+  closed: "safe",
 };
 
 const PRIORITY_TONES = {
@@ -31,25 +34,19 @@ const PRIORITY_TONES = {
   low: "safe",
 };
 
-const CASE_STATES = ["Active", "Pending Review", "Monitoring", "Closed"];
-const PRIORITIES = ["critical", "high", "medium", "low"];
-
-const STATE_FILTERS = [
+/**
+ * Filters use the wire status values from the API contract, with
+ * `STATUS_LABELS` for display. `unclosed` is a frontend-only convenience that
+ * means "anything not closed".
+ */
+const STATUS_FILTERS = [
   { id: "all", label: "All" },
-  { id: "open", label: "Open" },
-  { id: "Active", label: "Active" },
-  { id: "Pending Review", label: "Pending" },
-  { id: "Monitoring", label: "Monitoring" },
-  { id: "Closed", label: "Closed" },
+  { id: "unclosed", label: "Open" },
+  ...STATUSES.filter((status) => status !== "open").map((status) => ({
+    id: status,
+    label: STATUS_LABELS[status] ?? status,
+  })),
 ];
-
-const EMPTY_DRAFT = {
-  title: "",
-  summary: "",
-  analyst: "SOC Analyst",
-  priority: "high",
-  risk: "60",
-};
 
 /** Case list with create, edit, state transitions and delete. */
 export function InvestigationsClient() {
@@ -60,18 +57,16 @@ export function InvestigationsClient() {
   const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
   const [confirming, setConfirming] = useState(null);
-  const [draft, setDraft] = useState(EMPTY_DRAFT);
-  const [errors, setErrors] = useState({});
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
 
     return investigations.filter((item) => {
-      if (filter === "open" && item.state === "Closed") {
+      if (filter === "unclosed" && item.status === "closed") {
         return false;
       }
 
-      if (filter !== "all" && filter !== "open" && item.state !== filter) {
+      if (filter !== "all" && filter !== "unclosed" && item.status !== filter) {
         return false;
       }
 
@@ -79,13 +74,13 @@ export function InvestigationsClient() {
         return true;
       }
 
-      return [item.id, item.title, item.summary, item.analyst]
+      return [item.case_id, item.title, item.description, item.analyst]
         .filter(Boolean)
         .some((field) => field.toLowerCase().includes(needle));
     });
   }, [investigations, filter, query]);
 
-  const open = investigations.filter((item) => item.state !== "Closed");
+  const open = investigations.filter((item) => item.status !== "closed");
 
   /** Live counts, derived from the store rather than the seed. */
   const linkedEmails = (caseId) =>
@@ -93,81 +88,6 @@ export function InvestigationsClient() {
 
   const linkedIndicators = (caseId) =>
     indicators.filter((item) => (item.cases ?? []).includes(caseId)).length;
-
-  const validate = (values) => {
-    const next = {};
-
-    if (values.title.trim().length < 6) {
-      next.title = "Give the case a title of at least 6 characters.";
-    }
-
-    if (values.summary.trim().length < 20) {
-      next.summary = "Summarise the case in at least 20 characters.";
-    }
-
-    const risk = Number(values.risk);
-
-    if (!Number.isFinite(risk) || risk < 0 || risk > 100) {
-      next.risk = "Risk must be a number between 0 and 100.";
-    }
-
-    return next;
-  };
-
-  const submitCreate = (event) => {
-    event.preventDefault();
-
-    const nextErrors = validate(draft);
-    setErrors(nextErrors);
-
-    if (Object.keys(nextErrors).length > 0) {
-      return;
-    }
-
-    actions.createCase({
-      title: draft.title.trim(),
-      summary: draft.summary.trim(),
-      analyst: draft.analyst,
-      priority: draft.priority,
-      risk: clampScore(draft.risk),
-    });
-
-    setDraft(EMPTY_DRAFT);
-    setCreating(false);
-  };
-
-  const submitEdit = (event) => {
-    event.preventDefault();
-
-    const nextErrors = validate(draft);
-    setErrors(nextErrors);
-
-    if (Object.keys(nextErrors).length > 0) {
-      return;
-    }
-
-    actions.updateCase(editing, {
-      title: draft.title.trim(),
-      summary: draft.summary.trim(),
-      analyst: draft.analyst,
-      priority: draft.priority,
-      risk: clampScore(draft.risk),
-    });
-
-    setEditing(null);
-  };
-
-  const startEdit = (item) => {
-    setDraft({
-      title: item.title,
-      summary: item.summary,
-      analyst: item.analyst,
-      priority: item.priority,
-      risk: String(item.risk),
-    });
-    setErrors({});
-    setEditing(item.id);
-  };
 
   return (
     <div className="space-y-6">
@@ -213,7 +133,7 @@ export function InvestigationsClient() {
           <Icon name="filter" className="text-xs text-ink-faint" />
 
           <FilterPills
-            options={STATE_FILTERS}
+            options={STATUS_FILTERS}
             value={filter}
             onChange={setFilter}
           />
@@ -223,18 +143,14 @@ export function InvestigationsClient() {
           <SearchInput
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search case id, title, summary or analyst…"
+            placeholder="Search case id, title, description or analyst…"
             aria-label="Search investigations"
             className="sm:w-80"
           />
 
           <Button
             icon="plus"
-            onClick={() => {
-              setDraft(EMPTY_DRAFT);
-              setErrors({});
-              setCreating(true);
-            }}
+            onClick={() => setCreating(true)}
           >
             Open a case
           </Button>
@@ -260,10 +176,7 @@ export function InvestigationsClient() {
               <Button
                 size="sm"
                 icon="plus"
-                onClick={() => {
-                  setDraft(EMPTY_DRAFT);
-                  setCreating(true);
-                }}
+                onClick={() => setCreating(true)}
               >
                 Open a case
               </Button>
@@ -273,12 +186,12 @@ export function InvestigationsClient() {
       ) : (
         <ul className="space-y-4">
           {filtered.map((item) => {
-            const stateTone = STATE_TONES[item.state] ?? "neutral";
+            const stateTone = STATUS_TONES[item.status] ?? "neutral";
             const priorityTone = PRIORITY_TONES[item.priority] ?? "neutral";
-            const closed = item.state === "Closed";
+            const closed = item.status === "closed";
 
             return (
-              <li key={item.id}>
+              <li key={item.case_id}>
                 <Card
                   interactive
                   className={cn("p-6 transition", closed && "opacity-70")}
@@ -287,7 +200,7 @@ export function InvestigationsClient() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-3">
                         <span className="font-mono text-xs font-bold text-accent">
-                          {item.id}
+                          {item.case_id}
                         </span>
 
                         {/* State is a control, not a label */}
@@ -298,12 +211,12 @@ export function InvestigationsClient() {
                               type="button"
                               // Names the case, so the control is not just
                               // "Active" with no context.
-                              aria-label={`Change state for ${item.id} — currently ${item.state}`}
+                              aria-label={`Change state for ${item.case_id} — currently ${STATUS_LABELS[item.status] ?? item.status}`}
                               className="inline-flex items-center gap-1.5 rounded transition duration-200 hover:opacity-80"
                               {...props}
                             >
                               <Badge tone={stateTone} size="sm" dot>
-                                {item.state}
+                                {STATUS_LABELS[item.status] ?? item.status}
                               </Badge>
 
                               <Icon
@@ -318,24 +231,26 @@ export function InvestigationsClient() {
                           </p>
 
                           <ul className="p-2">
-                            {CASE_STATES.map((option) => (
+                            {STATUSES.map((option) => (
                               <li key={option}>
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    actions.setCaseState(item.id, option)
+                                    actions.setCaseStatus(item.case_id, option)
                                   }
                                   className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition duration-200 hover:bg-raise-md"
                                 >
                                   <StatusDot
-                                    tone={STATE_TONES[option] ?? "neutral"}
+                                    tone={STATUS_TONES[option] ?? "neutral"}
                                   />
 
+                                  {/* Labels, not wire values — nobody should
+                                      read "pending_review" in a menu. */}
                                   <span className="text-xs text-ink-soft">
-                                    {option}
+                                    {STATUS_LABELS[option] ?? option}
                                   </span>
 
-                                  {item.state === option && (
+                                  {item.status === option && (
                                     <Icon
                                       name="check"
                                       className="ml-auto text-accent"
@@ -357,7 +272,7 @@ export function InvestigationsClient() {
                       </h2>
 
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-soft">
-                        {item.summary}
+                        {item.description}
                       </p>
 
                       <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-[11px]">
@@ -368,12 +283,12 @@ export function InvestigationsClient() {
                           {
                             icon: "envelope",
                             label: "Messages",
-                            value: linkedEmails(item.id),
+                            value: linkedEmails(item.case_id),
                           },
                           {
                             icon: "fingerprint",
                             label: "Indicators",
-                            value: linkedIndicators(item.id),
+                            value: linkedIndicators(item.case_id),
                           },
                         ].map((meta) => (
                           <div
@@ -427,28 +342,28 @@ export function InvestigationsClient() {
 
                         <IconButton
                           icon="edit"
-                          label={`Edit ${item.id}`}
+                          label={`Edit ${item.case_id}`}
                           size="sm"
-                          onClick={() => startEdit(item)}
+                          onClick={() => setEditing(item.case_id)}
                         />
 
                         <IconButton
                           icon="trash"
-                          label={`Delete ${item.id}`}
+                          label={`Delete ${item.case_id}`}
                           size="sm"
                           variant="danger"
-                          onClick={() => setConfirming(item.id)}
+                          onClick={() => setConfirming(item.case_id)}
                         />
                       </div>
                     </div>
                   </div>
 
-                  {confirming === item.id && (
+                  {confirming === item.case_id && (
                     <ConfirmInline
-                      question={`Delete ${item.id}? Linked messages are detached, not deleted.`}
+                      question={`Delete ${item.case_id}? Linked messages are detached, not deleted.`}
                       onCancel={() => setConfirming(null)}
                       onConfirm={() => {
-                        actions.deleteCase(item.id);
+                        actions.deleteCase(item.case_id);
                         setConfirming(null);
                       }}
                       className="mt-5"
@@ -489,146 +404,35 @@ export function InvestigationsClient() {
       </Card>
 
       {/* ================= CREATE / EDIT ================= */}
-      <Modal
-        open={creating || Boolean(editing)}
-        onClose={() => {
-          setCreating(false);
-          setEditing(null);
-          setErrors({});
-        }}
-        subtitle={editing ? `Editing ${editing}` : "New case"}
-        title={editing ? "Update investigation" : "Open an investigation"}
-        size="md"
-      >
-        <form
-          onSubmit={editing ? submitEdit : submitCreate}
-          className="space-y-5"
-          noValidate
-        >
-          <Field id="case-title" label="Title" error={errors.title} required>
-            {(field) => (
-              <Input
-                {...field}
-                value={draft.title}
-                onChange={(event) =>
-                  setDraft((previous) => ({
-                    ...previous,
-                    title: event.target.value,
-                  }))
-                }
-                placeholder="Invoice fraud targeting finance"
-                error={errors.title}
-              />
-            )}
-          </Field>
-
-          <Field
-            id="case-summary"
-            label="Summary"
-            error={errors.summary}
-            hint="What is happening, and why it warranted a case."
-            required
-          >
-            {(field) => (
-              <Textarea
-                {...field}
-                rows={4}
-                value={draft.summary}
-                onChange={(event) =>
-                  setDraft((previous) => ({
-                    ...previous,
-                    summary: event.target.value,
-                  }))
-                }
-                placeholder="A newly registered domain is impersonating a supplier and requesting a change of banking details."
-                error={errors.summary}
-              />
-            )}
-          </Field>
-
-          <div className="grid gap-5 sm:grid-cols-3">
-            <Field id="case-analyst" label="Analyst">
-              {(field) => (
-                <Select
-                  {...field}
-                  value={draft.analyst}
-                  onChange={(event) =>
-                    setDraft((previous) => ({
-                      ...previous,
-                      analyst: event.target.value,
-                    }))
-                  }
-                >
-                  {["SOC Analyst", "DFIR Lead", "Threat Intel"].map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-
-            <Field id="case-priority" label="Priority">
-              {(field) => (
-                <Select
-                  {...field}
-                  value={draft.priority}
-                  onChange={(event) =>
-                    setDraft((previous) => ({
-                      ...previous,
-                      priority: event.target.value,
-                    }))
-                  }
-                >
-                  {PRIORITIES.map((priority) => (
-                    <option key={priority} value={priority}>
-                      {priority}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-
-            <Field id="case-risk" label="Risk score" error={errors.risk}>
-              {(field) => (
-                <Input
-                  {...field}
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={draft.risk}
-                  onChange={(event) =>
-                    setDraft((previous) => ({
-                      ...previous,
-                      risk: event.target.value,
-                    }))
-                  }
-                  error={errors.risk}
-                  className="font-mono"
-                />
-              )}
-            </Field>
-          </div>
-
-          <div className="flex items-center gap-3 border-t border-line pt-5">
-            <Button type="submit" icon={editing ? "save" : "plus"}>
-              {editing ? "Save changes" : "Open case"}
-            </Button>
-
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setCreating(false);
-                setEditing(null);
-                setErrors({});
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      {/*
+        `key` remounts the form when the target changes, so switching from
+        one case to another starts from a fresh draft with no syncing effect.
+      */}
+      {(creating || editing) && (
+        <CaseFormModal
+          key={editing ?? "new"}
+          open
+          mode={editing ? "edit" : "create"}
+          initial={
+            editing
+              ? investigations.find((item) => item.case_id === editing)
+              : null
+          }
+          onClose={() => {
+            setCreating(false);
+            setEditing(null);
+          }}
+          onSubmit={(payload) => {
+            if (editing) {
+              actions.updateCase(editing, payload);
+              setEditing(null);
+            } else {
+              actions.createCase(payload);
+              setCreating(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -150,15 +150,25 @@ export function StatCard({
         )}
       </div>
 
-      <p className="mt-4 text-[11px] font-medium uppercase tracking-wider text-ink-faint">
-        {label}
-      </p>
+      {/*
+        A description list, not three loose paragraphs. The label and its
+        value are genuinely a pair, so associating them means a screen reader
+        reads "Open cases, 4" rather than two unrelated strings — and a test
+        can scope to one tile instead of guessing at DOM ancestry.
+      */}
+      <dl className="mt-4">
+        <dt className="text-[11px] font-medium uppercase tracking-wider text-ink-faint">
+          {label}
+        </dt>
 
-      <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-ink">
-        {typeof value === "number" ? formatNumber(value) : value}
-      </p>
+        <dd className="mt-1 font-mono text-2xl font-bold tracking-tight text-ink">
+          {typeof value === "number" ? formatNumber(value) : value}
+        </dd>
 
-      {detail && <p className="mt-1.5 text-[11px] text-ink-muted">{detail}</p>}
+        {detail && (
+          <dd className="mt-1.5 text-[11px] text-ink-muted">{detail}</dd>
+        )}
+      </dl>
     </Card>
   );
 }
