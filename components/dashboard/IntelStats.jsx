@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+
 import { cn } from "@/lib/utils/cn";
 import { tone as resolveTone } from "@/lib/utils/tones";
 import { useData } from "@/components/providers/DataProvider";
@@ -8,27 +10,49 @@ import { StatCard, DistributionBar } from "@/components/ui/DataDisplay";
 
 const TYPE_TONES = ["critical", "high", "warn", "info", "safe"];
 
-/**
- * Threat-intelligence figures, derived live from the registry.
- *
- * These were server-rendered from the seed, which meant adding or removing an
- * indicator left the tiles contradicting the table directly below them.
- */
+const VERDICT_RULES = [
+  {
+    verdict: "malicious",
+    tone: "critical",
+    rule: "Corroborated by two or more independent signals, or observed in a confirmed campaign.",
+  },
+  {
+    verdict: "suspicious",
+    tone: "warn",
+    rule: "One strong signal, or several weak ones, without corroboration yet.",
+  },
+  {
+    verdict: "benign",
+    tone: "safe",
+    rule: "Known-good infrastructure with a consistent observation history.",
+  },
+  {
+    verdict: "unknown",
+    tone: "neutral",
+    rule: "Insufficient evidence. Explicitly recorded rather than assumed safe.",
+  },
+];
+
 export function IntelStats() {
   const { indicators } = useData();
 
-  const malicious = indicators.filter(
-    (entry) => entry.verdict === "malicious",
-  ).length;
+  const stats = useMemo(() => {
+    let malicious = 0;
+    let suspicious = 0;
+    let sightings = 0;
 
-  const suspicious = indicators.filter(
-    (entry) => entry.verdict === "suspicious",
-  ).length;
+    for (const entry of indicators) {
+      if (entry.verdict === "malicious") malicious += 1;
+      if (entry.verdict === "suspicious") suspicious += 1;
+      sightings += Number(entry.sightings ?? 0);
+    }
 
-  const sightings = indicators.reduce(
-    (total, entry) => total + (entry.sightings ?? 0),
-    0,
-  );
+    return {
+      malicious,
+      suspicious,
+      sightings,
+    };
+  }, [indicators]);
 
   return (
     <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
@@ -38,27 +62,24 @@ export function IntelStats() {
         value={indicators.length}
         detail="Across all investigations"
       />
-
       <StatCard
         icon="ban"
         label="Confirmed malicious"
-        value={malicious}
+        value={stats.malicious}
         detail="Verdict assigned after enrichment"
         tone="critical"
       />
-
       <StatCard
         icon="warning"
         label="Suspicious"
-        value={suspicious}
+        value={stats.suspicious}
         detail="Awaiting further evidence"
         tone="warn"
       />
-
       <StatCard
         icon="eye"
         label="Total sightings"
-        value={sightings}
+        value={stats.sightings}
         detail="Observations across the corpus"
         tone="info"
       />
@@ -66,23 +87,24 @@ export function IntelStats() {
   );
 }
 
-/** Registry composition by indicator type, also derived live. */
 export function IntelComposition() {
   const { indicators } = useData();
 
-  const counts = indicators.reduce((accumulator, entry) => {
-    accumulator[entry.type] = (accumulator[entry.type] ?? 0) + 1;
+  const distribution = useMemo(() => {
+    const counts = indicators.reduce((accumulator, entry) => {
+      const type = entry.type || "Unknown";
+      accumulator[type] = (accumulator[type] ?? 0) + 1;
+      return accumulator;
+    }, {});
 
-    return accumulator;
-  }, {});
-
-  const distribution = Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([label, value], index) => ({
-      label,
-      value,
-      tone: TYPE_TONES[index % TYPE_TONES.length],
-    }));
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, value], index) => ({
+        label,
+        value,
+        tone: TYPE_TONES[index % TYPE_TONES.length],
+      }));
+  }, [indicators]);
 
   return (
     <Card className="p-5">
@@ -104,31 +126,7 @@ export function IntelComposition() {
   );
 }
 
-/** Verdict assignment rules, static copy but colour-linked to the tone table. */
 export function VerdictRules() {
-  const rules = [
-    {
-      verdict: "malicious",
-      tone: "critical",
-      rule: "Corroborated by two or more independent signals, or observed in a confirmed campaign.",
-    },
-    {
-      verdict: "suspicious",
-      tone: "warn",
-      rule: "One strong signal, or several weak ones, without corroboration yet.",
-    },
-    {
-      verdict: "benign",
-      tone: "safe",
-      rule: "Known-good infrastructure with a consistent observation history.",
-    },
-    {
-      verdict: "unknown",
-      tone: "neutral",
-      rule: "Insufficient evidence. Explicitly recorded rather than assumed safe.",
-    },
-  ];
-
   return (
     <Card className="p-5">
       <CardHeader
@@ -139,21 +137,20 @@ export function VerdictRules() {
       />
 
       <ol className="mt-5 space-y-3">
-        {rules.map((item) => {
-          const t = resolveTone(item.tone);
+        {VERDICT_RULES.map((item) => {
+          const resolvedTone = resolveTone(item.tone);
 
           return (
             <li key={item.verdict} className="flex items-start gap-3">
               <span
                 className={cn(
                   "shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider",
-                  t.bg,
-                  t.text,
+                  resolvedTone.bg,
+                  resolvedTone.text,
                 )}
               >
                 {item.verdict}
               </span>
-
               <p className="text-[11px] leading-5 text-ink-soft">{item.rule}</p>
             </li>
           );

@@ -40,16 +40,128 @@ const VIEWS = [
   { id: "archived", label: "Archived", icon: "archive" },
   { id: "trash", label: "Trash", icon: "trash" },
 ];
-
-/*
- * Gmail messages do not necessarily have the application's
- * category field.
- *
- * Until ThreatDetect performs category classification,
- * incoming Gmail messages are treated as Primary.
- */
 function getEmailCategory(email) {
   return email.category || "Primary";
+}
+
+function formatAnalysisLabel(value) {
+  return String(value ?? "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function flattenEvidence(value, prefix = "") {
+  if (value == null || value === "") return [];
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      flattenEvidence(item, prefix ? `${prefix}.${index}` : String(index)),
+    );
+  }
+
+  if (typeof value === "object") {
+    return Object.entries(value).flatMap(([key, item]) =>
+      flattenEvidence(item, prefix ? `${prefix}.${key}` : key),
+    );
+  }
+
+  return [{ label: formatAnalysisLabel(prefix), value: String(value) }];
+}
+
+function AnalysisSummaryPanel({ email }) {
+  const analysis = email.analysis;
+  const identity = email.identityAnalysis;
+  const behavioral = email.behavioralAnalysis;
+  const intelligence = email.threatIntelligence;
+
+  if (!analysis && !identity && !behavioral && !intelligence) {
+    return (
+      <Card className="p-5">
+        <div className="flex items-center gap-2">
+          <Icon name="search" className="text-accent" />
+          <h3 className="text-sm font-semibold text-ink">Backend analysis</h3>
+        </div>
+        <p className="mt-2 text-xs text-ink-muted">
+          Analysis has not been returned for this message yet.
+        </p>
+      </Card>
+    );
+  }
+
+  const evidence = [
+    ...flattenEvidence(identity, "identity"),
+    ...flattenEvidence(behavioral, "behavioral"),
+  ].slice(0, 12);
+
+  const intelIndicators = Array.isArray(intelligence?.indicators)
+    ? intelligence.indicators
+    : [];
+
+  return (
+    <Card className="p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <Icon name="shield" className="text-accent" />
+            <h3 className="text-sm font-semibold text-ink">Backend analysis</h3>
+          </div>
+          <p className="mt-1 text-xs text-ink-muted">
+            Explainable results returned by ThreatDetect.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {analysis?.risk?.level && (
+            <Badge tone="neutral" size="xs">
+              {formatAnalysisLabel(analysis.risk.level)}
+            </Badge>
+          )}
+          {analysis?.classification && (
+            <Badge tone="neutral" size="xs">
+              {formatAnalysisLabel(analysis.classification)}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {evidence.length > 0 && (
+        <dl className="mt-4 grid gap-2 sm:grid-cols-2">
+          {evidence.map((item, index) => (
+            <div
+              key={`${item.label}-${index}`}
+              className="rounded-lg border border-line bg-raise px-3 py-2.5"
+            >
+              <dt className="text-[10px] font-medium uppercase tracking-wider text-ink-faint">
+                {item.label}
+              </dt>
+              <dd className="mt-1 break-words text-xs text-ink-soft">
+                {item.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+
+      {intelIndicators.length > 0 && (
+        <div className="mt-4">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-ink-faint">
+            Threat intelligence
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {intelIndicators.slice(0, 8).map((indicator, index) => (
+              <Badge
+                key={`${indicator?.value ?? "indicator"}-${index}`}
+                tone="neutral"
+                size="xs"
+              >
+                {indicator?.value ?? indicator?.indicator ?? String(indicator)}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
 }
 
 export function InboxClient() {
@@ -63,11 +175,6 @@ export function InboxClient() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [openEmailId, setOpenEmailId] = useState(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-
-  /*
-   * Messages belonging to the current stored view,
-   * before tab/risk filters.
-   */
   const inView = useMemo(() => {
     switch (view) {
       case "starred":
@@ -90,12 +197,6 @@ export function InboxClient() {
     const needle = query.trim().toLowerCase();
 
     return inView.filter((email) => {
-      /*
-       * Category tabs only apply to Inbox.
-       *
-       * Gmail messages without an explicit ThreatDetect
-       * category are treated as Primary.
-       */
       if (view === "inbox" && getEmailCategory(email) !== category) {
         return false;
       }
@@ -128,10 +229,6 @@ export function InboxClient() {
       ].some((field) => String(field).toLowerCase().includes(needle));
     });
   }, [inView, view, category, filter, query]);
-
-  /*
-   * Selection is scoped to what is visible.
-   */
   const visibleIds = filtered.map((email) => email.id);
 
   const selectedVisible = visibleIds.filter((id) => selectedIds.includes(id));
@@ -172,13 +269,6 @@ export function InboxClient() {
   const openCases = openInvestigations({
     investigations,
   });
-
-  /*
-   * Category counts.
-   *
-   * Gmail messages without a category are
-   * counted under Primary.
-   */
   const tabs = emailCategories.map((name) => ({
     id: name,
     label: name,
@@ -207,8 +297,6 @@ export function InboxClient() {
 
   return (
     <div className="space-y-6">
-      {/* ================= LIVE STATS ================= */}
-
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon="envelope"
@@ -252,8 +340,6 @@ export function InboxClient() {
         />
       </div>
 
-      {/* ================= BACKEND STATUS ================= */}
-
       {backendError && (
         <div className="rounded-xl border border-critical/20 bg-critical/[0.05] px-4 py-3">
           <div className="flex items-start gap-3">
@@ -283,8 +369,6 @@ export function InboxClient() {
           </div>
         </div>
       )}
-
-      {/* ================= VIEW SWITCH ================= */}
 
       <div className="flex flex-wrap items-center gap-2">
         {VIEWS.map((item) => {
@@ -319,8 +403,6 @@ export function InboxClient() {
           );
         })}
       </div>
-
-      {/* ================= CONTROLS ================= */}
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         {view === "inbox" ? (
@@ -372,11 +454,7 @@ export function InboxClient() {
         </p>
       </div>
 
-      {/* ================= LIST ================= */}
-
       <Card padded={false} className="overflow-hidden">
-        {/* Bulk action toolbar */}
-
         <div className="space-y-3 border-b border-line px-4 py-3">
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-3 text-xs text-ink-muted">
@@ -528,8 +606,6 @@ export function InboxClient() {
           )}
         </div>
 
-        {/* Column headings */}
-
         <div className="hidden grid-cols-[2rem_1.3fr_2fr_9rem_7rem_5rem] items-center gap-4 border-b border-line bg-raise px-4 py-2.5 text-[10px] font-medium uppercase tracking-wider text-ink-faint lg:grid">
           <span className="sr-only">Select</span>
           <span>Sender</span>
@@ -538,8 +614,6 @@ export function InboxClient() {
           <span>Severity</span>
           <span className="text-right">Actions</span>
         </div>
-
-        {/* Loading */}
 
         {backendLoading && emails.length === 0 ? (
           <div className="flex min-h-64 items-center justify-center">
@@ -610,8 +684,6 @@ export function InboxClient() {
           </ul>
         )}
       </Card>
-
-      {/* ================= DETAIL DIALOG ================= */}
 
       <Modal
         open={Boolean(openEmail)}
@@ -713,10 +785,6 @@ export function InboxClient() {
   );
 }
 
-/* ============================================================
-   EMAIL ROW
-   ============================================================ */
-
 function EmailRow({ email, view, selected, onSelect, onOpen, actions }) {
   const t = resolveTone(riskTone(email.risk));
 
@@ -727,8 +795,6 @@ function EmailRow({ email, view, selected, onSelect, onOpen, actions }) {
         selected ? "bg-accent/[0.06]" : "hover:bg-elevated",
       )}
     >
-      {/* Severity edge marker */}
-
       {email.risk >= 75 && (
         <span
           aria-hidden="true"
@@ -737,8 +803,6 @@ function EmailRow({ email, view, selected, onSelect, onOpen, actions }) {
       )}
 
       <div className="grid grid-cols-[2rem_1fr] items-start gap-4 px-4 py-4 lg:grid-cols-[2rem_1.3fr_2fr_9rem_7rem_5rem] lg:items-center">
-        {/* Select */}
-
         <div className="flex items-center pt-0.5 lg:pt-0">
           <input
             type="checkbox"
@@ -748,8 +812,6 @@ function EmailRow({ email, view, selected, onSelect, onOpen, actions }) {
             aria-label={`Select "${email.subject}"`}
           />
         </div>
-
-        {/* Sender */}
 
         <div className="flex min-w-0 items-center gap-3">
           <span
@@ -776,8 +838,6 @@ function EmailRow({ email, view, selected, onSelect, onOpen, actions }) {
             <p className="ioc truncate text-ink-faint">{email.senderEmail}</p>
           </div>
         </div>
-
-        {/* Subject */}
 
         <div className="col-span-2 min-w-0 lg:col-span-1">
           <button
@@ -837,13 +897,9 @@ function EmailRow({ email, view, selected, onSelect, onOpen, actions }) {
           </button>
         </div>
 
-        {/* Risk meter */}
-
         <div className="col-start-2 lg:col-start-auto">
           <RiskMeter score={email.risk} size="sm" />
         </div>
-
-        {/* Severity + time */}
 
         <div className="col-start-2 flex items-center justify-between gap-2 lg:col-start-auto lg:block">
           <RiskBadge score={email.risk} />
@@ -852,8 +908,6 @@ function EmailRow({ email, view, selected, onSelect, onOpen, actions }) {
             {email.time}
           </p>
         </div>
-
-        {/* Row actions */}
 
         <div className="col-start-2 flex items-center justify-end gap-0.5 opacity-100 transition duration-200 lg:col-start-auto lg:opacity-0 lg:group-focus-within:opacity-100 lg:group-hover:opacity-100">
           <IconButton
@@ -895,10 +949,6 @@ function EmailRow({ email, view, selected, onSelect, onOpen, actions }) {
     </li>
   );
 }
-
-/* ============================================================
-   EMAIL DETAIL
-   ============================================================ */
 
 function EmailDetailBody({ email }) {
   return (
@@ -959,6 +1009,8 @@ function EmailDetailBody({ email }) {
 
         <RiskMeter score={email.risk} />
       </div>
+
+      <AnalysisSummaryPanel email={email} />
 
       <MessagePanel email={email} />
 

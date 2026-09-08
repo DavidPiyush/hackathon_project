@@ -4,7 +4,6 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils/cn";
 import { tone as resolveTone, STATE_TONES } from "@/lib/utils/tones";
-import { threatTrend, threatDistribution, serviceStatus } from "@/lib/data/dashboard";
 import { riskTone, needsReview, summarizeRisk } from "@/lib/utils/risk";
 import { useData } from "@/components/providers/DataProvider";
 import { Icon } from "@/components/ui/Icon";
@@ -24,20 +23,19 @@ const BANDS = [
   { id: "suspicious", label: "Suspicious", tone: "warn" },
   { id: "safe", label: "Safe", tone: "safe" },
 ];
-
-/**
- * Overview widgets.
- *
- * Every figure derives from live store state, so archiving a message or
- * closing a case is reflected here immediately rather than leaving the
- * overview disagreeing with the pages it summarises.
- */
 export function OverviewClient() {
-  const { emails, investigations, reports } = useData();
+  const {
+    emails,
+    investigations,
+    reports,
+    backendConnected,
+    backendLoading,
+    backendError,
+  } = useData();
 
   const live = emails.filter((email) => !email.deleted && !email.archived);
 
-  const analysed = threatTrend.reduce((total, day) => total + day.total, 0);
+  const analysed = emails.filter((email) => email.analysis).length;
   const highRisk = live.filter((email) => email.risk >= 75).length;
   const reviewQueue = live.filter((email) => needsReview(email.risk)).length;
   const openCases = investigations.filter((item) => item.state !== "Closed");
@@ -45,6 +43,90 @@ export function OverviewClient() {
 
   const triage = [...live].sort((a, b) => b.risk - a.risk).slice(0, 5);
   const topCase = openCases[0] ?? investigations[0] ?? null;
+
+  const threatDistribution = [
+    {
+      label: "Phishing",
+      value: live.filter((email) =>
+        String(email.classification || "")
+          .toLowerCase()
+          .includes("phish"),
+      ).length,
+    },
+    {
+      label: "Malware",
+      value: live.filter((email) =>
+        String(email.classification || "")
+          .toLowerCase()
+          .includes("malware"),
+      ).length,
+    },
+    {
+      label: "BEC",
+      value: live.filter((email) => {
+        const findings = Array.isArray(email.findings) ? email.findings : [];
+        return findings.some((finding) =>
+          String(finding?.type || "")
+            .toLowerCase()
+            .includes("bec"),
+        );
+      }).length,
+    },
+    {
+      label: "Other",
+      value: live.filter((email) => {
+        const classification = String(email.classification || "").toLowerCase();
+        return (
+          !classification.includes("phish") &&
+          !classification.includes("malware") &&
+          !classification.includes("bec")
+        );
+      }).length,
+    },
+  ];
+
+  const trend = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() - (6 - index));
+    const key = date.toISOString().slice(0, 10);
+    const dayEmails = emails.filter((email) =>
+      String(email.receivedAt || email.internalDate || "").startsWith(key),
+    );
+
+    return {
+      label: date.toLocaleDateString("en-IN", { weekday: "short" }),
+      total: dayEmails.length,
+      high: dayEmails.filter((email) => email.risk >= 75).length,
+    };
+  });
+
+  const serviceStatus = [
+    {
+      name: "ThreatDetect API",
+      state: backendLoading
+        ? "checking"
+        : backendConnected
+          ? "operational"
+          : "offline",
+      detail: backendError?.message || "FastAPI analysis and data services",
+      latency: "live",
+    },
+    {
+      name: "Gmail",
+      state:
+        emails.length > 0
+          ? "operational"
+          : backendLoading
+            ? "checking"
+            : "idle",
+      detail:
+        emails.length > 0
+          ? "Messages synchronized"
+          : "No messages synchronized",
+      latency: "live",
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -101,7 +183,7 @@ export function OverviewClient() {
           />
 
           <div className="mt-6">
-            <TrendChart data={threatTrend} />
+            <TrendChart data={trend} />
           </div>
         </Card>
 
@@ -169,7 +251,12 @@ export function OverviewClient() {
               title="The queue is clear"
               description="Every message has been archived or deleted. Nothing is waiting on an analyst."
               action={
-                <Button href="/dashboard/inbox" size="sm" variant="secondary" icon="inbox">
+                <Button
+                  href="/dashboard/inbox"
+                  size="sm"
+                  variant="secondary"
+                  icon="inbox"
+                >
                   Open the inbox
                 </Button>
               }
@@ -305,7 +392,11 @@ export function OverviewClient() {
                       (email) => email.caseId === topCase.id && !email.deleted,
                     ).length,
                   },
-                  { label: "Reports", value: reports.filter((r) => r.caseId === topCase.id).length },
+                  {
+                    label: "Reports",
+                    value: reports.filter((r) => r.caseId === topCase.id)
+                      .length,
+                  },
                   { label: "Updated", value: topCase.updated },
                 ].map((item) => (
                   <div

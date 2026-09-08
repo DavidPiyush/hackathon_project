@@ -9,16 +9,6 @@ import { Icon } from "@/components/ui/Icon";
 import { Card, CardHeader, KeyValue, EmptyState } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { IndicatorRow } from "@/components/ui/Interactive";
-
-/**
- * Evidence panels.
- *
- * Each one renders a single slice of an investigation and is used by both the
- * inbox detail dialog and the full analysis page, so the two views can never
- * describe the same message differently.
- */
-
-/** SPF / DKIM / DMARC / alignment results. */
 export function AuthenticationPanel({ authentication, className }) {
   const rows = [
     { key: "spf", label: "SPF", hint: "Is the sending IP authorised?" },
@@ -64,7 +54,11 @@ export function AuthenticationPanel({ authentication, className }) {
                   </p>
                 </div>
 
-                <Badge tone={AUTH_TONES[result.result] ?? "neutral"} size="xs" uppercase>
+                <Badge
+                  tone={AUTH_TONES[result.result] ?? "neutral"}
+                  size="xs"
+                  uppercase
+                >
                   {result.result}
                 </Badge>
               </div>
@@ -77,7 +71,6 @@ export function AuthenticationPanel({ authentication, className }) {
         })}
       </ul>
 
-      {/* The single most misunderstood point in email security. */}
       <p className="mt-5 flex items-start gap-2 rounded-lg border border-info/20 bg-info/[0.06] p-3 text-[11px] leading-5 text-ink-soft">
         <Icon name="info" className="mt-0.5 shrink-0 text-info" />
         <span>
@@ -89,8 +82,6 @@ export function AuthenticationPanel({ authentication, className }) {
     </Card>
   );
 }
-
-/** Origin address, network, ASN and registration context. */
 export function InfrastructurePanel({ infrastructure, className }) {
   if (!infrastructure) {
     return null;
@@ -139,8 +130,6 @@ export function InfrastructurePanel({ infrastructure, className }) {
     </Card>
   );
 }
-
-/** Extracted indicators of compromise. */
 export function IndicatorPanel({ indicators = [], className }) {
   return (
     <Card className={cn("p-5", className)}>
@@ -159,8 +148,10 @@ export function IndicatorPanel({ indicators = [], className }) {
         />
       ) : (
         <ul className="mt-5 space-y-2">
-          {indicators.map((indicator) => (
-            <li key={indicator.value}>
+          {indicators.map((indicator, index) => (
+            <li
+              key={`${indicator.id ?? indicator.value ?? `indicator-${index}`}-${indicator.type ?? "unknown"}-${index}`}
+            >
               <IndicatorRow
                 indicator={indicator}
                 verdictTone={VERDICT_TONES[indicator.verdict] ?? "neutral"}
@@ -178,12 +169,18 @@ export function IndicatorPanel({ indicators = [], className }) {
     </Card>
   );
 }
-
-/**
- * Analytical findings, each tagged with how it was established. This is the
- * evidence model from the landing page, applied to a real message.
- */
 export function FindingsPanel({ findings = [], className }) {
+  const normalizedFindings = findings.map((finding, index) => ({
+    id: finding?.id || finding?.finding_id || `finding-${index + 1}`,
+    text: finding?.text || finding?.description || finding?.detail || "",
+    evidence:
+      typeof finding?.evidence === "string"
+        ? finding.evidence
+        : finding?.evidence?.type || finding?.evidence?.source || "unknown",
+    confidence: finding?.confidence || finding?.confidence_score || null,
+    severity: finding?.severity || "unknown",
+  }));
+
   return (
     <Card className={cn("p-5", className)}>
       <CardHeader
@@ -192,46 +189,75 @@ export function FindingsPanel({ findings = [], className }) {
         subtitle="Every conclusion labelled by how it was established"
       />
 
-      <ul className="mt-5 space-y-2.5">
-        {findings.map((finding) => {
-          const t = resolveTone(EVIDENCE_TONES[finding.evidence] ?? "neutral");
+      {normalizedFindings.length === 0 ? (
+        <EmptyState
+          icon="check-circle"
+          title="No findings returned"
+          description="The analysis engine did not report any forensic findings for this message."
+          className="py-10"
+        />
+      ) : (
+        <ul className="mt-5 space-y-2.5">
+          {normalizedFindings.map((finding) => {
+            const t = resolveTone(
+              EVIDENCE_TONES[finding.evidence] ?? "neutral",
+            );
 
-          return (
-            <li
-              key={finding.text}
-              className={cn(
-                "flex items-start gap-3 rounded-lg border bg-raise p-3",
-                t.border,
-              )}
-            >
-              <span
+            return (
+              <li
+                key={`${finding.id}-${index}`}
                 className={cn(
-                  "shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider",
-                  t.bg,
-                  t.text,
+                  "flex items-start gap-3 rounded-lg border bg-raise p-3",
+                  t.border,
                 )}
               >
-                {finding.evidence}
-              </span>
+                <span
+                  className={cn(
+                    "shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider",
+                    t.bg,
+                    t.text,
+                  )}
+                >
+                  {finding.evidence}
+                </span>
 
-              <p className="min-w-0 flex-1 text-xs leading-5 text-ink-soft">
-                {finding.text}
-              </p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs leading-5 text-ink-soft">
+                    {finding.text || "No finding description returned."}
+                  </p>
 
-              {finding.confidence && (
-                <Badge tone="info" size="xs" uppercase className="shrink-0">
-                  {finding.confidence}
-                </Badge>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+                  {finding.severity !== "unknown" && (
+                    <Badge
+                      tone={
+                        finding.severity === "critical" ||
+                        finding.severity === "high"
+                          ? "critical"
+                          : finding.severity === "medium"
+                            ? "warn"
+                            : "neutral"
+                      }
+                      size="xs"
+                      uppercase
+                      className="mt-2"
+                    >
+                      {finding.severity}
+                    </Badge>
+                  )}
+                </div>
+
+                {finding.confidence && (
+                  <Badge tone="info" size="xs" uppercase className="shrink-0">
+                    {finding.confidence}
+                  </Badge>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </Card>
   );
 }
-
-/** Attachments with their static-analysis verdict. */
 export function AttachmentPanel({ attachments = [], className }) {
   if (attachments.length === 0) {
     return null;
@@ -246,13 +272,13 @@ export function AttachmentPanel({ attachments = [], className }) {
       />
 
       <ul className="mt-5 space-y-2">
-        {attachments.map((file) => {
+        {attachments.map((file, index) => {
           const verdictTone = VERDICT_TONES[file.verdict] ?? "neutral";
           const t = resolveTone(verdictTone);
 
           return (
             <li
-              key={file.name}
+              key={`${file.name ?? "attachment"}-${index}`}
               className={cn(
                 "flex items-center gap-3 rounded-lg border bg-raise p-3",
                 t.border,
@@ -285,16 +311,11 @@ export function AttachmentPanel({ attachments = [], className }) {
     </Card>
   );
 }
-
-/** The rendered message body, presented as quoted evidence. */
-/** The rendered message body, presented as quoted evidence. */
 export function MessagePanel({ email, className }) {
   const body =
     typeof email?.body === "string"
       ? email.body
-      : email?.body?.text ||
-        email?.body?.paragraphs?.join("\n\n") ||
-        "";
+      : email?.body?.text || email?.body?.paragraphs?.join("\n\n") || "";
 
   const paragraphs = body
     .split(/\r?\n\s*\r?\n/)
@@ -323,9 +344,7 @@ export function MessagePanel({ email, className }) {
             </p>
           ))
         ) : (
-          <p className="text-sm text-ink-muted">
-            No message body available.
-          </p>
+          <p className="text-sm text-ink-muted">No message body available.</p>
         )}
       </div>
     </Card>

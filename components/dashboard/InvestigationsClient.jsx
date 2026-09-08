@@ -1,27 +1,39 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils/cn";
 import { tone as resolveTone } from "@/lib/utils/tones";
-import { riskTone, clampScore } from "@/lib/utils/risk";
-import { useData } from "@/components/providers/DataProvider";
+import { riskTone } from "@/lib/utils/risk";
+
 import { Icon } from "@/components/ui/Icon";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Card, CardHeader, EmptyState } from "@/components/ui/Card";
 import { Badge, RiskBadge, StatusDot } from "@/components/ui/Badge";
 import { StatCard, Meter } from "@/components/ui/DataDisplay";
-import { Field, Input, Select, Textarea, SearchInput } from "@/components/ui/Form";
+import {
+  Field,
+  Input,
+  Select,
+  Textarea,
+  SearchInput,
+} from "@/components/ui/Form";
 import { FilterPills } from "@/components/ui/Interactive";
 import { Popover } from "@/components/ui/Popover";
 import { Modal } from "@/components/ui/Modal";
-import { ConfirmInline } from "@/components/ui/Feedback";
+import { ConfirmInline, Spinner } from "@/components/ui/Feedback";
 
-const STATE_TONES = {
-  Active: "critical",
-  "Pending Review": "warn",
-  Monitoring: "info",
-  Closed: "safe",
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+const STATUS_OPTIONS = ["open", "investigating", "resolved", "closed"];
+
+const PRIORITIES = ["critical", "high", "medium", "low"];
+
+const STATUS_TONES = {
+  open: "info",
+  investigating: "critical",
+  resolved: "safe",
+  closed: "neutral",
 };
 
 const PRIORITY_TONES = {
@@ -31,47 +43,197 @@ const PRIORITY_TONES = {
   low: "safe",
 };
 
-const CASE_STATES = ["Active", "Pending Review", "Monitoring", "Closed"];
-const PRIORITIES = ["critical", "high", "medium", "low"];
-
-const STATE_FILTERS = [
+const STATUS_FILTERS = [
   { id: "all", label: "All" },
   { id: "open", label: "Open" },
-  { id: "Active", label: "Active" },
-  { id: "Pending Review", label: "Pending" },
-  { id: "Monitoring", label: "Monitoring" },
-  { id: "Closed", label: "Closed" },
+  { id: "investigating", label: "Investigating" },
+  { id: "resolved", label: "Resolved" },
+  { id: "closed", label: "Closed" },
 ];
 
 const EMPTY_DRAFT = {
   title: "",
-  summary: "",
-  analyst: "SOC Analyst",
-  priority: "high",
-  risk: "60",
+  description: "",
+  analyst: "",
+  priority: "medium",
 };
 
-/** Case list with create, edit, state transitions and delete. */
+function normalizeListResponse(payload) {
+  if (!payload) return [];
+
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (Array.isArray(payload.investigations)) {
+    return payload.investigations;
+  }
+
+  if (Array.isArray(payload.data)) {
+    return payload.data;
+  }
+
+  if (Array.isArray(payload.data?.investigations)) {
+    return payload.data.investigations;
+  }
+
+  return [];
+}
+
+function normalizeSingleResponse(payload) {
+  if (!payload) return null;
+
+  if (payload.data?.investigation) {
+    return payload.data.investigation;
+  }
+
+  if (payload.investigation) {
+    return payload.investigation;
+  }
+
+  if (payload.data && !Array.isArray(payload.data)) {
+    return payload.data;
+  }
+
+  return payload;
+}
+
+function formatStatus(status) {
+  const value = String(status || "open");
+
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatDate(value) {
+  if (!value) return "—";
+
+  try {
+    return new Date(value).toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  } catch {
+    return String(value);
+  }
+}
+
+function getRisk(item) {
+  const value = Number(item?.risk_score ?? 0);
+
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(100, value));
+}
+
+function getEmailCount(item) {
+  return Number(item?.email_count ?? 0);
+}
+
+function getFindingCount(item) {
+  return Number(item?.finding_count ?? 0);
+}
+
+function getCaseId(item) {
+  return item?.case_id || item?.id || "";
+}
+
+async function apiRequest(path, options = {}) {
+  const response = await fetch(`${API_URL}${path}`, {
+    credentials: "include",
+    cache: "no-store",
+    ...options,
+    headers: {
+      Accept: "application/json",
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+  });
+
+  let payload = null;
+
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.detail ||
+        payload?.error ||
+        `Request failed with HTTP ${response.status}`,
+    );
+  }
+
+  return payload;
+}
+
 export function InvestigationsClient() {
-  const { investigations, emails, indicators, actions } = useData();
+  const [investigations, setInvestigations] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [error, setError] = useState("");
 
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState(null);
+
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [viewing, setViewing] = useState(null);
+
   const [confirming, setConfirming] = useState(null);
+
+  const [saving, setSaving] = useState(false);
+  const [loadingCase, setLoadingCase] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(null);
+
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [errors, setErrors] = useState({});
+
+  const loadInvestigations = async ({ silent = false } = {}) => {
+    if (silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
+    setError("");
+
+    try {
+      const payload = await apiRequest("/investigations");
+
+      const rows = normalizeListResponse(payload);
+
+      setInvestigations(rows);
+    } catch (requestError) {
+      console.error("[INVESTIGATIONS] Failed to load cases:", requestError);
+
+      setError(requestError?.message || "Unable to load investigations.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadInvestigations();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
 
     return investigations.filter((item) => {
-      if (filter === "open" && item.state === "Closed") {
-        return false;
-      }
+      const status = String(item.status || "").toLowerCase();
 
-      if (filter !== "all" && filter !== "open" && item.state !== filter) {
+      if (filter !== "all" && status !== filter) {
         return false;
       }
 
@@ -79,141 +241,366 @@ export function InvestigationsClient() {
         return true;
       }
 
-      return [item.id, item.title, item.summary, item.analyst]
+      return [
+        item.case_id,
+        item.title,
+        item.description,
+        item.analyst,
+        item.priority,
+        item.status,
+        item.classification,
+      ]
         .filter(Boolean)
-        .some((field) => field.toLowerCase().includes(needle));
+        .some((field) => String(field).toLowerCase().includes(needle));
     });
   }, [investigations, filter, query]);
 
-  const open = investigations.filter((item) => item.state !== "Closed");
+  const openCases = useMemo(
+    () =>
+      investigations.filter((item) =>
+        ["open", "investigating"].includes(
+          String(item.status || "").toLowerCase(),
+        ),
+      ),
+    [investigations],
+  );
 
-  /** Live counts, derived from the store rather than the seed. */
-  const linkedEmails = (caseId) =>
-    emails.filter((email) => email.caseId === caseId && !email.deleted).length;
+  const activeInvestigations = useMemo(
+    () =>
+      investigations.filter(
+        (item) => String(item.status || "").toLowerCase() === "investigating",
+      ),
+    [investigations],
+  );
 
-  const linkedIndicators = (caseId) =>
-    indicators.filter((item) => (item.cases ?? []).includes(caseId)).length;
+  const totalEmails = useMemo(
+    () => investigations.reduce((sum, item) => sum + getEmailCount(item), 0),
+    [investigations],
+  );
+
+  const totalFindings = useMemo(
+    () => investigations.reduce((sum, item) => sum + getFindingCount(item), 0),
+    [investigations],
+  );
 
   const validate = (values) => {
     const next = {};
 
-    if (values.title.trim().length < 6) {
-      next.title = "Give the case a title of at least 6 characters.";
+    if (values.title.trim().length < 3) {
+      next.title = "Give the investigation a title of at least 3 characters.";
     }
 
-    if (values.summary.trim().length < 20) {
-      next.summary = "Summarise the case in at least 20 characters.";
+    if (values.description.trim().length < 5) {
+      next.description = "Provide a short description of the incident.";
     }
 
-    const risk = Number(values.risk);
-
-    if (!Number.isFinite(risk) || risk < 0 || risk > 100) {
-      next.risk = "Risk must be a number between 0 and 100.";
+    if (!PRIORITIES.includes(values.priority)) {
+      next.priority = "Select a valid priority.";
     }
 
     return next;
   };
 
-  const submitCreate = (event) => {
-    event.preventDefault();
-
-    const nextErrors = validate(draft);
-    setErrors(nextErrors);
-
-    if (Object.keys(nextErrors).length > 0) {
-      return;
-    }
-
-    actions.createCase({
-      title: draft.title.trim(),
-      summary: draft.summary.trim(),
-      analyst: draft.analyst,
-      priority: draft.priority,
-      risk: clampScore(draft.risk),
+  const openCreate = () => {
+    setDraft({
+      ...EMPTY_DRAFT,
     });
 
-    setDraft(EMPTY_DRAFT);
-    setCreating(false);
+    setErrors({});
+    setError("");
+    setEditing(null);
+    setCreating(true);
   };
 
-  const submitEdit = (event) => {
+  const submitCreate = async (event) => {
     event.preventDefault();
 
     const nextErrors = validate(draft);
+
     setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) {
       return;
     }
 
-    actions.updateCase(editing, {
-      title: draft.title.trim(),
-      summary: draft.summary.trim(),
-      analyst: draft.analyst,
-      priority: draft.priority,
-      risk: clampScore(draft.risk),
-    });
+    setSaving(true);
+    setError("");
 
-    setEditing(null);
+    try {
+      const payload = await apiRequest("/investigations", {
+        method: "POST",
+        body: JSON.stringify({
+          title: draft.title.trim(),
+          description: draft.description.trim(),
+          priority: draft.priority,
+          analyst: draft.analyst.trim() || null,
+        }),
+      });
+
+      const created = normalizeSingleResponse(payload);
+
+      if (created?.case_id) {
+        setInvestigations((previous) => [
+          created,
+          ...previous.filter((item) => item.case_id !== created.case_id),
+        ]);
+      } else {
+        await loadInvestigations({ silent: true });
+      }
+
+      setCreating(false);
+      setDraft({
+        ...EMPTY_DRAFT,
+      });
+      setErrors({});
+    } catch (requestError) {
+      console.error("[INVESTIGATIONS] Create failed:", requestError);
+
+      setError(requestError?.message || "Unable to create the investigation.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const startEdit = (item) => {
+    setEditing(getCaseId(item));
+
+    setCreating(false);
+
     setDraft({
-      title: item.title,
-      summary: item.summary,
-      analyst: item.analyst,
-      priority: item.priority,
-      risk: String(item.risk),
+      title: item.title || "",
+      description: item.description || "",
+      analyst: item.analyst || "",
+      priority: item.priority || "medium",
     });
+
     setErrors({});
-    setEditing(item.id);
+    setError("");
+  };
+
+  const submitEdit = async (event) => {
+    event.preventDefault();
+
+    const nextErrors = validate(draft);
+
+    setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    if (!editing) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    try {
+      const payload = await apiRequest(
+        `/investigations/${encodeURIComponent(editing)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            title: draft.title.trim(),
+            description: draft.description.trim(),
+            priority: draft.priority,
+            analyst: draft.analyst.trim() || null,
+          }),
+        },
+      );
+
+      const updated = normalizeSingleResponse(payload);
+
+      if (updated?.case_id) {
+        setInvestigations((previous) =>
+          previous.map((item) => (item.case_id === editing ? updated : item)),
+        );
+      } else {
+        await loadInvestigations({ silent: true });
+      }
+
+      setEditing(null);
+      setErrors({});
+    } catch (requestError) {
+      console.error("[INVESTIGATIONS] Update failed:", requestError);
+
+      setError(requestError?.message || "Unable to update the investigation.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changeStatus = async (caseId, status) => {
+    if (!caseId || !STATUS_OPTIONS.includes(status)) {
+      return;
+    }
+
+    setChangingStatus(caseId);
+    setError("");
+
+    try {
+      const payload = await apiRequest(
+        `/investigations/${encodeURIComponent(caseId)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            status,
+          }),
+        },
+      );
+
+      const updated = normalizeSingleResponse(payload);
+
+      if (updated?.case_id) {
+        setInvestigations((previous) =>
+          previous.map((item) => (item.case_id === caseId ? updated : item)),
+        );
+      } else {
+        await loadInvestigations({ silent: true });
+      }
+    } catch (requestError) {
+      console.error("[INVESTIGATIONS] Status update failed:", requestError);
+
+      setError(requestError?.message || "Unable to change case status.");
+    } finally {
+      setChangingStatus(null);
+    }
+  };
+
+  const deleteCase = async (caseId) => {
+    if (!caseId) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    try {
+      await apiRequest(`/investigations/${encodeURIComponent(caseId)}`, {
+        method: "DELETE",
+      });
+
+      setInvestigations((previous) =>
+        previous.filter((item) => item.case_id !== caseId),
+      );
+
+      setConfirming(null);
+    } catch (requestError) {
+      console.error("[INVESTIGATIONS] Delete failed:", requestError);
+
+      setError(requestError?.message || "Unable to delete the investigation.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openCase = async (caseId) => {
+    if (!caseId) {
+      return;
+    }
+
+    setLoadingCase(true);
+    setError("");
+
+    try {
+      const payload = await apiRequest(
+        `/investigations/${encodeURIComponent(caseId)}`,
+      );
+
+      const complete = payload?.data || payload;
+
+      setViewing(complete);
+    } catch (requestError) {
+      console.error("[INVESTIGATIONS] Failed to load case:", requestError);
+
+      setError(
+        requestError?.message || "Unable to load investigation details.",
+      );
+    } finally {
+      setLoadingCase(false);
+    }
+  };
+
+  const closeForm = () => {
+    if (saving) {
+      return;
+    }
+
+    setCreating(false);
+    setEditing(null);
+    setErrors({});
   };
 
   return (
     <div className="space-y-6">
-      {/* ================= LIVE STATS ================= */}
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+
+{error && (
+        <Card className="border-danger/20 bg-danger/[0.04] p-4">
+          <div className="flex items-start gap-3">
+            <Icon
+              name="alert-triangle"
+              className="mt-0.5 shrink-0 text-danger"
+            />
+
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-ink">
+                Investigation service error
+              </p>
+
+              <p className="mt-1 text-xs leading-5 text-ink-muted">{error}</p>
+            </div>
+
+            <IconButton
+              icon="x"
+              label="Dismiss error"
+              size="sm"
+              onClick={() => setError("")}
+            />
+          </div>
+        </Card>
+      )}
+
+<div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon="folder"
           label="Open cases"
-          value={open.length}
-          detail="Active, pending or monitoring"
+          value={openCases.length}
+          detail="Open + investigating"
           tone="critical"
         />
 
         <StatCard
-          icon="checklist"
-          label="Total cases"
-          value={investigations.length}
-          detail="Including closed"
-        />
-
-        <StatCard
-          icon="envelope"
-          label="Messages linked"
-          value={emails.filter((email) => email.caseId && !email.deleted).length}
-          detail="Across all cases"
+          icon="activity"
+          label="Investigating"
+          value={activeInvestigations.length}
+          detail="Currently under analysis"
           tone="info"
         />
 
         <StatCard
-          icon="fingerprint"
-          label="Indicators"
-          value={
-            indicators.filter((item) => (item.cases ?? []).length > 0).length
-          }
-          detail="Attached to a case"
-          tone="warn"
+          icon="envelope"
+          label="Emails linked"
+          value={totalEmails}
+          detail="Persisted evidence"
+          tone="info"
+        />
+
+        <StatCard
+          icon="alert-triangle"
+          label="Findings"
+          value={totalFindings}
+          detail="Across all cases"
+          tone={totalFindings > 0 ? "warn" : "neutral"}
         />
       </div>
 
-      {/* ================= CONTROLS ================= */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
           <Icon name="filter" className="text-xs text-ink-faint" />
 
           <FilterPills
-            options={STATE_FILTERS}
+            options={STATUS_FILTERS}
             value={filter}
             onChange={setFilter}
           />
@@ -223,26 +610,41 @@ export function InvestigationsClient() {
           <SearchInput
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search case id, title, summary or analyst…"
+            placeholder="Search case, title, analyst or status…"
             aria-label="Search investigations"
             className="sm:w-80"
           />
 
           <Button
-            icon="plus"
-            onClick={() => {
-              setDraft(EMPTY_DRAFT);
-              setErrors({});
-              setCreating(true);
-            }}
+            variant="secondary"
+            icon="refresh"
+            disabled={loading || refreshing}
+            onClick={() => loadInvestigations({ silent: true })}
           >
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </Button>
+
+          <Button icon="plus" onClick={openCreate}>
             Open a case
           </Button>
         </div>
       </div>
 
-      {/* ================= CASE LIST ================= */}
-      {filtered.length === 0 ? (
+{loading ? (
+        <Card className="p-10">
+          <div className="flex flex-col items-center justify-center gap-3 text-center">
+            <Spinner />
+
+            <p className="text-sm font-medium text-ink">
+              Loading investigations
+            </p>
+
+            <p className="text-xs text-ink-faint">
+              Reading cases from the investigation database…
+            </p>
+          </div>
+        </Card>
+      ) : filtered.length === 0 ? (
         <Card>
           <EmptyState
             icon="folder"
@@ -253,57 +655,63 @@ export function InvestigationsClient() {
             }
             description={
               investigations.length === 0
-                ? "A case collects the messages, indicators and infrastructure that belong to one incident."
-                : "Try a different state filter, or clear the search box."
+                ? "Create your first investigation. The case will be persisted in PostgreSQL and can later become the source for a forensic report."
+                : "Try a different status filter or clear the search box."
             }
             action={
-              <Button
-                size="sm"
-                icon="plus"
-                onClick={() => {
-                  setDraft(EMPTY_DRAFT);
-                  setCreating(true);
-                }}
-              >
-                Open a case
-              </Button>
+              investigations.length === 0 ? (
+                <Button size="sm" icon="plus" onClick={openCreate}>
+                  Open a case
+                </Button>
+              ) : undefined
             }
           />
         </Card>
       ) : (
         <ul className="space-y-4">
           {filtered.map((item) => {
-            const stateTone = STATE_TONES[item.state] ?? "neutral";
-            const priorityTone = PRIORITY_TONES[item.priority] ?? "neutral";
-            const closed = item.state === "Closed";
+            const caseId = getCaseId(item);
+            const status = String(item.status || "open").toLowerCase();
+
+            const priority = String(item.priority || "medium").toLowerCase();
+
+            const risk = getRisk(item);
+            const emailCount = getEmailCount(item);
+            const findingCount = getFindingCount(item);
+
+            const statusTone = STATUS_TONES[status] || "neutral";
+
+            const priorityTone = PRIORITY_TONES[priority] || "neutral";
 
             return (
-              <li key={item.id}>
+              <li key={caseId}>
                 <Card
                   interactive
-                  className={cn("p-6 transition", closed && "opacity-70")}
+                  className={cn(
+                    "p-6 transition",
+                    status === "closed" && "opacity-70",
+                  )}
                 >
                   <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0 flex-1">
+
+<div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-3">
                         <span className="font-mono text-xs font-bold text-accent">
-                          {item.id}
+                          {caseId}
                         </span>
 
-                        {/* State is a control, not a label */}
-                        <Popover
+<Popover
                           align="left"
                           trigger={(props) => (
                             <button
                               type="button"
-                              // Names the case, so the control is not just
-                              // "Active" with no context.
-                              aria-label={`Change state for ${item.id} — currently ${item.state}`}
-                              className="inline-flex items-center gap-1.5 rounded transition duration-200 hover:opacity-80"
+                              aria-label={`Change status for ${caseId}`}
+                              disabled={changingStatus === caseId}
+                              className="inline-flex items-center gap-1.5 rounded transition hover:opacity-80 disabled:opacity-50"
                               {...props}
                             >
-                              <Badge tone={stateTone} size="sm" dot>
-                                {item.state}
+                              <Badge tone={statusTone} size="sm" dot>
+                                {formatStatus(status)}
                               </Badge>
 
                               <Icon
@@ -313,67 +721,96 @@ export function InvestigationsClient() {
                             </button>
                           )}
                         >
-                          <p className="border-b border-line px-4 py-3 text-xs font-semibold text-ink">
-                            Move case to
-                          </p>
+                          <div className="min-w-44">
+                            <p className="border-b border-line px-4 py-3 text-xs font-semibold text-ink">
+                              Change status
+                            </p>
 
-                          <ul className="p-2">
-                            {CASE_STATES.map((option) => (
-                              <li key={option}>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    actions.setCaseState(item.id, option)
-                                  }
-                                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition duration-200 hover:bg-raise-md"
-                                >
-                                  <StatusDot
-                                    tone={STATE_TONES[option] ?? "neutral"}
-                                  />
-
-                                  <span className="text-xs text-ink-soft">
-                                    {option}
-                                  </span>
-
-                                  {item.state === option && (
-                                    <Icon
-                                      name="check"
-                                      className="ml-auto text-accent"
+                            <ul className="p-2">
+                              {STATUS_OPTIONS.map((option) => (
+                                <li key={option}>
+                                  <button
+                                    type="button"
+                                    disabled={changingStatus === caseId}
+                                    onClick={() => changeStatus(caseId, option)}
+                                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-raise-md disabled:opacity-50"
+                                  >
+                                    <StatusDot
+                                      tone={STATUS_TONES[option] || "neutral"}
                                     />
-                                  )}
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
+
+                                    <span className="text-xs text-ink-soft">
+                                      {formatStatus(option)}
+                                    </span>
+
+                                    {status === option && (
+                                      <Icon
+                                        name="check"
+                                        className="ml-auto text-accent"
+                                      />
+                                    )}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         </Popover>
 
                         <Badge tone={priorityTone} size="sm" uppercase>
-                          {item.priority}
+                          {priority}
                         </Badge>
+
+                        {item.classification && (
+                          <Badge
+                            tone={
+                              String(item.classification)
+                                .toLowerCase()
+                                .includes("phish")
+                                ? "critical"
+                                : "neutral"
+                            }
+                            size="sm"
+                          >
+                            {item.classification}
+                          </Badge>
+                        )}
                       </div>
 
                       <h2 className="mt-3 text-base font-semibold text-ink">
-                        {item.title}
+                        {item.title || "Untitled investigation"}
                       </h2>
 
                       <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-soft">
-                        {item.summary}
+                        {item.description ||
+                          "No investigation description provided."}
                       </p>
 
                       <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-[11px]">
                         {[
-                          { icon: "user", label: "Analyst", value: item.analyst },
-                          { icon: "clock", label: "Opened", value: item.opened },
-                          { icon: "refresh", label: "Updated", value: item.updated },
                           {
-                            icon: "envelope",
-                            label: "Messages",
-                            value: linkedEmails(item.id),
+                            icon: "user",
+                            label: "Analyst",
+                            value: item.analyst || "Unassigned",
                           },
                           {
-                            icon: "fingerprint",
-                            label: "Indicators",
-                            value: linkedIndicators(item.id),
+                            icon: "clock",
+                            label: "Opened",
+                            value: formatDate(item.created_at),
+                          },
+                          {
+                            icon: "refresh",
+                            label: "Updated",
+                            value: formatDate(item.updated_at),
+                          },
+                          {
+                            icon: "envelope",
+                            label: "Emails",
+                            value: emailCount,
+                          },
+                          {
+                            icon: "alert-triangle",
+                            label: "Findings",
+                            value: findingCount,
                           },
                         ].map((meta) => (
                           <div
@@ -384,7 +821,9 @@ export function InvestigationsClient() {
                               name={meta.icon}
                               className="text-[10px] text-ink-faint"
                             />
+
                             <dt className="text-ink-faint">{meta.label}</dt>
+
                             <dd className="font-mono font-semibold text-ink-soft">
                               {meta.value}
                             </dd>
@@ -393,64 +832,79 @@ export function InvestigationsClient() {
                       </dl>
                     </div>
 
-                    <div className="shrink-0 lg:w-56">
+<div className="shrink-0 lg:w-56">
                       <div className="flex items-center justify-between gap-3">
-                        <RiskBadge score={item.risk} showScore />
+                        <RiskBadge score={risk} showScore />
 
                         <span
                           className={cn(
                             "font-mono text-2xl font-bold",
-                            resolveTone(riskTone(item.risk)).text,
+                            resolveTone(riskTone(risk)).text,
                           )}
                         >
-                          {item.risk}
+                          {risk}
                         </span>
                       </div>
 
                       <Meter
-                        value={item.risk}
-                        tone={riskTone(item.risk)}
+                        value={risk}
+                        tone={riskTone(risk)}
                         size="sm"
-                        label={`Case risk ${item.risk} of 100`}
+                        label={`Case risk ${risk} of 100`}
                         className="mt-3"
                       />
 
-                      <div className="mt-4 flex items-center gap-2">
+                      <div className="mt-4 grid grid-cols-2 gap-2">
                         <Button
-                          href="/dashboard/analysis"
                           variant="secondary"
                           size="sm"
-                          className="flex-1"
+                          className="w-full"
+                          icon="eye"
+                          onClick={() => openCase(caseId)}
                         >
-                          Evidence
+                          View
+                        </Button>
+
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="w-full"
+                          icon="edit"
+                          onClick={() => startEdit(item)}
+                        >
+                          Edit
+                        </Button>
+                      </div>
+
+                      <div className="mt-2 flex items-center gap-2">
+                        <Button
+                          href={`/dashboard/reports?caseId=${encodeURIComponent(
+                            caseId,
+                          )}`}
+                          variant="ghost"
+                          size="sm"
+                          className="flex-1"
+                          icon="file"
+                        >
+                          Report
                         </Button>
 
                         <IconButton
-                          icon="edit"
-                          label={`Edit ${item.id}`}
-                          size="sm"
-                          onClick={() => startEdit(item)}
-                        />
-
-                        <IconButton
                           icon="trash"
-                          label={`Delete ${item.id}`}
+                          label={`Delete ${caseId}`}
                           size="sm"
                           variant="danger"
-                          onClick={() => setConfirming(item.id)}
+                          onClick={() => setConfirming(caseId)}
                         />
                       </div>
                     </div>
                   </div>
 
-                  {confirming === item.id && (
+{confirming === caseId && (
                     <ConfirmInline
-                      question={`Delete ${item.id}? Linked messages are detached, not deleted.`}
+                      question={`Delete ${caseId}? Stored case data and linked evidence will be affected according to the backend delete operation.`}
                       onCancel={() => setConfirming(null)}
-                      onConfirm={() => {
-                        actions.deleteCase(item.id);
-                        setConfirming(null);
-                      }}
+                      onConfirm={() => deleteCase(caseId)}
                       className="mt-5"
                     />
                   )}
@@ -461,42 +915,29 @@ export function InvestigationsClient() {
         </ul>
       )}
 
-      {/* ================= CLOSURE RULES ================= */}
-      <Card className="p-6">
-        <CardHeader
-          icon="scale"
-          title="When a case can be closed"
-          subtitle="The platform blocks closure while evidence is outstanding"
-          level={2}
-        />
+<Card className="border-accent/15 bg-accent/[0.025] p-6">
+        <div className="flex items-start gap-3">
+          <Icon name="database" className="mt-0.5 shrink-0 text-accent" />
 
-        <ul className="mt-5 grid gap-3 sm:grid-cols-2">
-          {[
-            "Every promoted indicator has been acknowledged by an analyst",
-            "Authentication and infrastructure stages have both completed",
-            "Findings state a confidence level, or are marked unknown",
-            "A report has been generated and attached to the case",
-          ].map((rule) => (
-            <li
-              key={rule}
-              className="flex items-start gap-3 rounded-lg border border-line bg-raise p-3 text-xs leading-5 text-ink-soft"
-            >
-              <StatusDot tone="safe" className="mt-1.5" />
-              {rule}
-            </li>
-          ))}
-        </ul>
+          <div>
+            <p className="text-sm font-semibold text-ink">
+              Investigation is the source of truth
+            </p>
+
+            <p className="mt-2 max-w-4xl text-xs leading-6 text-ink-muted">
+              Cases are persisted by the backend rather than in browser state.
+              Email analysis can attach evidence, findings and indicators to a
+              case. The Reports module then builds the forensic report from
+              those persisted records.
+            </p>
+          </div>
+        </div>
       </Card>
 
-      {/* ================= CREATE / EDIT ================= */}
-      <Modal
+<Modal
         open={creating || Boolean(editing)}
-        onClose={() => {
-          setCreating(false);
-          setEditing(null);
-          setErrors({});
-        }}
-        subtitle={editing ? `Editing ${editing}` : "New case"}
+        onClose={closeForm}
+        subtitle={editing ? `Editing ${editing}` : "New investigation"}
         title={editing ? "Update investigation" : "Open an investigation"}
         size="md"
       >
@@ -518,38 +959,40 @@ export function InvestigationsClient() {
                 }
                 placeholder="Invoice fraud targeting finance"
                 error={errors.title}
+                disabled={saving}
               />
             )}
           </Field>
 
           <Field
-            id="case-summary"
-            label="Summary"
-            error={errors.summary}
-            hint="What is happening, and why it warranted a case."
+            id="case-description"
+            label="Description"
+            error={errors.description}
+            hint="Describe what happened and why this case was opened."
             required
           >
             {(field) => (
               <Textarea
                 {...field}
-                rows={4}
-                value={draft.summary}
+                rows={5}
+                value={draft.description}
                 onChange={(event) =>
                   setDraft((previous) => ({
                     ...previous,
-                    summary: event.target.value,
+                    description: event.target.value,
                   }))
                 }
-                placeholder="A newly registered domain is impersonating a supplier and requesting a change of banking details."
-                error={errors.summary}
+                placeholder="A suspicious email appears to impersonate a supplier and requests a change of banking details."
+                error={errors.description}
+                disabled={saving}
               />
             )}
           </Field>
 
-          <div className="grid gap-5 sm:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2">
             <Field id="case-analyst" label="Analyst">
               {(field) => (
-                <Select
+                <Input
                   {...field}
                   value={draft.analyst}
                   onChange={(event) =>
@@ -558,17 +1001,13 @@ export function InvestigationsClient() {
                       analyst: event.target.value,
                     }))
                   }
-                >
-                  {["SOC Analyst", "DFIR Lead", "Threat Intel"].map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </Select>
+                  placeholder="DFIR Analyst"
+                  disabled={saving}
+                />
               )}
             </Field>
 
-            <Field id="case-priority" label="Priority">
+            <Field id="case-priority" label="Priority" error={errors.priority}>
               {(field) => (
                 <Select
                   {...field}
@@ -579,6 +1018,7 @@ export function InvestigationsClient() {
                       priority: event.target.value,
                     }))
                   }
+                  disabled={saving}
                 >
                   {PRIORITIES.map((priority) => (
                     <option key={priority} value={priority}>
@@ -588,48 +1028,286 @@ export function InvestigationsClient() {
                 </Select>
               )}
             </Field>
-
-            <Field id="case-risk" label="Risk score" error={errors.risk}>
-              {(field) => (
-                <Input
-                  {...field}
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={draft.risk}
-                  onChange={(event) =>
-                    setDraft((previous) => ({
-                      ...previous,
-                      risk: event.target.value,
-                    }))
-                  }
-                  error={errors.risk}
-                  className="font-mono"
-                />
-              )}
-            </Field>
           </div>
 
+          {!editing && (
+            <div className="rounded-lg border border-info/20 bg-info/[0.05] p-4">
+              <div className="flex items-start gap-2.5">
+                <Icon name="info" className="mt-0.5 shrink-0 text-info" />
+
+                <p className="text-[11px] leading-5 text-ink-muted">
+                  The backend generates the case ID and starts the investigation
+                  with status{" "}
+                  <span className="font-mono text-ink-soft">open</span>. Risk
+                  and classification are not manually entered here; they can be
+                  updated from actual email analysis.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-3 border-t border-line pt-5">
-            <Button type="submit" icon={editing ? "save" : "plus"}>
-              {editing ? "Save changes" : "Open case"}
+            <Button
+              type="submit"
+              icon={saving ? undefined : editing ? "save" : "plus"}
+              disabled={saving}
+            >
+              {saving ? (
+                <>
+                  <Spinner size="sm" className="mr-2" />
+                  Saving…
+                </>
+              ) : editing ? (
+                "Save changes"
+              ) : (
+                "Open case"
+              )}
             </Button>
 
             <Button
               type="button"
               variant="ghost"
-              onClick={() => {
-                setCreating(false);
-                setEditing(null);
-                setErrors({});
-              }}
+              onClick={closeForm}
+              disabled={saving}
             >
               Cancel
             </Button>
           </div>
         </form>
       </Modal>
+
+<Modal
+        open={Boolean(viewing) || loadingCase}
+        onClose={() => {
+          if (!loadingCase) {
+            setViewing(null);
+          }
+        }}
+        subtitle="Investigation evidence"
+        title={
+          viewing?.investigation?.title || viewing?.title || "Investigation"
+        }
+        size="lg"
+      >
+        {loadingCase ? (
+          <div className="flex min-h-56 items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Spinner />
+
+              <p className="text-sm text-ink-soft">Loading case evidence…</p>
+            </div>
+          </div>
+        ) : viewing ? (
+          <CaseDetails
+            investigation={viewing.investigation || viewing}
+            emails={viewing.emails || []}
+            findings={viewing.findings || []}
+            iocs={viewing.iocs || []}
+          />
+        ) : null}
+      </Modal>
     </div>
+  );
+}
+
+function CaseDetails({ investigation, emails, findings, iocs }) {
+  const risk = getRisk(investigation);
+
+  return (
+    <div className="space-y-5">
+
+<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Detail label="Case ID" value={investigation.case_id} mono />
+
+        <Detail label="Status" value={formatStatus(investigation.status)} />
+
+        <Detail label="Priority" value={investigation.priority} />
+
+        <Detail label="Risk" value={`${risk} / 100`} mono />
+      </div>
+
+{investigation.description && (
+        <div className="rounded-lg border border-line bg-raise p-4">
+          <p className="text-[9px] font-semibold uppercase tracking-widest text-ink-faint">
+            Description
+          </p>
+
+          <p className="mt-2 text-sm leading-6 text-ink-soft">
+            {investigation.description}
+          </p>
+        </div>
+      )}
+
+<div className="grid gap-3 sm:grid-cols-3">
+        <MiniStat label="Emails" value={emails.length} icon="envelope" />
+
+        <MiniStat
+          label="Findings"
+          value={findings.length}
+          icon="alert-triangle"
+        />
+
+        <MiniStat label="IOCs" value={iocs.length} icon="fingerprint" />
+      </div>
+
+<EvidenceSection
+        title="Investigated emails"
+        count={emails.length}
+        icon="envelope"
+      >
+        {emails.length === 0 ? (
+          <p className="text-xs text-ink-faint">
+            No email evidence has been attached to this case.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {emails.map((email, index) => (
+              <div
+                key={email.id || email.gmail_message_id || index}
+                className="rounded-lg border border-line bg-raise p-3"
+              >
+                <p className="text-xs font-medium text-ink">
+                  {email.subject || "Untitled email"}
+                </p>
+
+                <p className="mt-1 text-[10px] text-ink-muted">
+                  {email.sender || "Unknown sender"}
+                </p>
+
+                {email.gmail_message_id && (
+                  <p className="mt-2 break-all font-mono text-[9px] text-ink-faint">
+                    Gmail: {email.gmail_message_id}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </EvidenceSection>
+
+<EvidenceSection
+        title="Security findings"
+        count={findings.length}
+        icon="alert-triangle"
+      >
+        {findings.length === 0 ? (
+          <p className="text-xs text-ink-faint">
+            No findings have been persisted for this case.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {findings.map((finding, index) => (
+              <div
+                key={finding.id || index}
+                className="rounded-lg border border-line bg-raise p-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-medium text-ink">
+                      {finding.type || "Security finding"}
+                    </p>
+
+                    <p className="mt-1 text-[10px] leading-5 text-ink-muted">
+                      {finding.description || "No description available."}
+                    </p>
+                  </div>
+
+                  <Badge
+                    tone={
+                      PRIORITY_TONES[
+                        String(finding.severity || "low").toLowerCase()
+                      ] || "neutral"
+                    }
+                    size="sm"
+                  >
+                    {finding.severity || "unknown"}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </EvidenceSection>
+
+<EvidenceSection
+        title="Indicators of compromise"
+        count={iocs.length}
+        icon="fingerprint"
+      >
+        {iocs.length === 0 ? (
+          <p className="text-xs text-ink-faint">
+            No IOCs have been persisted for this case.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {iocs.map((ioc, index) => (
+              <div
+                key={`${ioc.type}-${ioc.value}-${index}`}
+                className="flex items-start gap-3 rounded-lg border border-line bg-raise p-3"
+              >
+                <Badge tone="neutral" size="sm">
+                  {ioc.type || "unknown"}
+                </Badge>
+
+                <span className="min-w-0 break-all font-mono text-[10px] text-ink-soft">
+                  {ioc.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </EvidenceSection>
+    </div>
+  );
+}
+
+function Detail({ label, value, mono = false }) {
+  return (
+    <div>
+      <p className="text-[9px] font-semibold uppercase tracking-widest text-ink-faint">
+        {label}
+      </p>
+
+      <p className={cn("mt-1 text-xs text-ink-soft", mono && "font-mono")}>
+        {value || "—"}
+      </p>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, icon }) {
+  return (
+    <div className="rounded-lg border border-line bg-raise p-4">
+      <div className="flex items-center gap-2">
+        <Icon name={icon} className="text-[10px] text-accent" />
+
+        <span className="text-[9px] font-semibold uppercase tracking-widest text-ink-faint">
+          {label}
+        </span>
+      </div>
+
+      <p className="mt-2 font-mono text-xl font-bold text-ink">{value}</p>
+    </div>
+  );
+}
+
+function EvidenceSection({ title, count, icon, children }) {
+  return (
+    <section className="rounded-xl border border-line bg-raise p-4">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Icon name={icon} className="text-xs text-accent" />
+
+          <h3 className="text-xs font-semibold text-ink">{title}</h3>
+        </div>
+
+        <Badge tone="neutral" size="sm">
+          {count}
+        </Badge>
+      </div>
+
+      {children}
+    </section>
   );
 }
 

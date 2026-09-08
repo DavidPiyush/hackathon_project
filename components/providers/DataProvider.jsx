@@ -25,10 +25,6 @@ const DataContext = createContext(null);
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-/* ============================================================
-   API
-   ============================================================ */
-
 async function apiFetch(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -58,10 +54,6 @@ async function apiFetch(path, options = {}) {
 
   return data;
 }
-
-/* ============================================================
-   GMAIL HELPERS
-   ============================================================ */
 
 function headerValue(headers, name) {
   const header = (headers || []).find(
@@ -95,12 +87,6 @@ function decodeBase64Url(value) {
   }
 }
 
-/**
- * Gmail's full message is a MIME tree.
- *
- * Walk every part because body.data may not be directly
- * located on payload.body.
- */
 function collectMessageParts(part, result) {
   if (!part) {
     return;
@@ -136,10 +122,6 @@ function extractMessageBody(message) {
 
   collectMessageParts(message?.payload, result);
 
-  /*
-   * Some Gmail messages may have body.data directly
-   * on payload rather than inside parts.
-   */
   if (
     !result.plain.length &&
     !result.html.length &&
@@ -206,10 +188,6 @@ function extractAttachments(part, attachments = []) {
   return attachments;
 }
 
-/* ============================================================
-   GMAIL -> EXISTING UI MODEL
-   ============================================================ */
-
 function normalizeGmailMessage(response) {
   const message = response?.message || {};
   const metadata = response?.metadata || {};
@@ -233,36 +211,21 @@ function normalizeGmailMessage(response) {
       ? metadata.label_ids
       : [];
 
-  /*
-   * Gmail system labels
-   */
   const unread = labelIds.includes("UNREAD");
 
   const deleted = labelIds.includes("TRASH");
 
-  /*
-   * Gmail does not normally expose an "ARCHIVE" label.
-   *
-   * A message is archived when it is no longer in INBOX
-   * and is not in TRASH.
-   */
   const archived = !labelIds.includes("INBOX") && !deleted;
 
   const starred = labelIds.includes("STARRED");
 
   return {
-    /*
-     * Identity
-     */
     id: message.id || metadata.message_id,
 
     gmailMessageId: message.id || metadata.message_id,
 
     threadId: message.threadId || metadata.thread_id || null,
 
-    /*
-     * Existing inbox fields
-     */
     sender: sender.name,
 
     senderEmail: sender.email,
@@ -275,18 +238,12 @@ function normalizeGmailMessage(response) {
 
     time: receivedAt,
 
-    /*
-     * Content
-     */
     body: body.text,
 
     bodyText: body.text,
 
     bodyHtml: body.html,
 
-    /*
-     * Raw Gmail information
-     */
     snippet: message.snippet || metadata.snippet || "",
 
     labels: labelIds,
@@ -296,12 +253,6 @@ function normalizeGmailMessage(response) {
       value: header.value,
     })),
 
-    /*
-     * Existing threat UI.
-     *
-     * Gmail itself does not return a ThreatDetect
-     * risk verdict.
-     */
     risk: 0,
 
     classification: "unknown",
@@ -311,6 +262,14 @@ function normalizeGmailMessage(response) {
       dkim: "unknown",
       dmarc: "unknown",
     },
+
+    analysis: null,
+
+    identityAnalysis: null,
+
+    behavioralAnalysis: null,
+
+    threatIntelligence: null,
 
     infrastructure: {},
 
@@ -326,9 +285,6 @@ function normalizeGmailMessage(response) {
       /https?:\/\/|www\./i.test(body.text) ||
       /https?:\/\/|www\./i.test(body.html),
 
-    /*
-     * Existing local-console state
-     */
     starred,
 
     unread,
@@ -339,9 +295,6 @@ function normalizeGmailMessage(response) {
 
     caseId: null,
 
-    /*
-     * Evidence metadata
-     */
     internalDate: message.internalDate || metadata.internal_date || null,
 
     sizeEstimate: message.sizeEstimate || metadata.size_estimate || 0,
@@ -358,9 +311,190 @@ function normalizeGmailMessage(response) {
   };
 }
 
-/* ============================================================
-   PROVIDER
-   ============================================================ */
+function resultForIndicator(data, value) {
+  const needle = String(value).toLowerCase();
+  const results = [
+    ...(Array.isArray(data?.ips) ? data.ips : []),
+    ...(Array.isArray(data?.domains) ? data.domains : []),
+    ...(Array.isArray(data?.urls) ? data.urls : []),
+  ];
+
+  return results.find(
+    (item) => String(item?.indicator || "").toLowerCase() === needle,
+  );
+}
+
+function toEnrichment(data, result, fallbackType = null) {
+  if (!result) return null;
+
+  return {
+    analyzedAt: data?.analyzed_at || null,
+    indicator: result.indicator || null,
+    indicatorType: result.indicator_type || fallbackType,
+    available: result.available ?? true,
+    reputation: String(result.reputation || "unknown").toLowerCase(),
+    threatScore: Number(result.threat_score || 0),
+    abuseConfidence: Number(result.abuse_confidence || 0),
+    malicious: Boolean(result.malicious),
+    suspicious: Boolean(result.suspicious),
+    country: result.country || null,
+    countryCode: result.country_code || null,
+    asn: result.asn || null,
+    organization: result.organization || null,
+    isp: result.isp || null,
+    isTor: Boolean(result.is_tor),
+    isVpn: Boolean(result.is_vpn),
+    isProxy: Boolean(result.is_proxy),
+    isOpenRelay: Boolean(result.is_open_relay),
+    categories: Array.isArray(result.categories)
+      ? result.categories
+      : result.categories
+        ? [result.categories]
+        : [],
+    reports: Number(result.reports || 0),
+    finalUrl: result.final_url || null,
+    domain: result.domain || null,
+    registrar: result.registrar || null,
+    creationDate: result.creation_date || null,
+    expirationDate: result.expiration_date || null,
+    nameServers: Array.isArray(result.name_servers) ? result.name_servers : [],
+    resolutions: Array.isArray(result.resolutions) ? result.resolutions : [],
+    evidence: Array.isArray(result.evidence) ? result.evidence : [],
+    providers: result.providers || {},
+    errors: Array.isArray(result.errors) ? result.errors : [],
+  };
+}
+
+function deriveIndicatorVerdict(result, emailRisk = 0) {
+  if (!result) {
+    return Number(emailRisk) >= 70 ? "suspicious" : "unknown";
+  }
+
+  const reputation = String(result.reputation || "unknown").toLowerCase();
+  const score = Number(result.threat_score || 0);
+
+  if (
+    reputation === "malicious" &&
+    (score >= 80 || result.malicious === true)
+  ) {
+    return "malicious";
+  }
+
+  if (
+    reputation === "malicious" ||
+    reputation === "suspicious" ||
+    result.suspicious === true ||
+    score >= 60 ||
+    Number(emailRisk) >= 70
+  ) {
+    return "suspicious";
+  }
+
+  return "unknown";
+}
+
+function buildLiveIndicators(emails) {
+  const registry = new Map();
+
+  for (const email of Array.isArray(emails) ? emails : []) {
+    const analysis = email?.analysis;
+    const parsed = analysis?.email || {};
+
+    const emailRisk = Number(analysis?.risk?.score ?? email?.risk ?? 0);
+
+    const senderDomain =
+      String(email?.senderEmail || "")
+        .split("@")
+        .pop()
+        ?.toLowerCase() || "";
+
+    const sources = [
+      ...(Array.isArray(parsed.ips) ? parsed.ips : []).map((value) => ({
+        value,
+        type: "IPv4",
+      })),
+      ...(Array.isArray(parsed.domains) ? parsed.domains : []).map((value) => ({
+        value,
+        type: "Domain",
+      })),
+      ...(Array.isArray(parsed.urls) ? parsed.urls : []).map((value) => ({
+        value,
+        type: "URL",
+      })),
+    ];
+
+    for (const source of sources) {
+      const value = String(source.value || "").trim();
+      if (!value) continue;
+
+      const key = value.toLowerCase();
+      const existing = registry.get(key);
+
+      let tiResult = resultForIndicator(analysis?.threat_intelligence, value);
+
+      if (!tiResult) {
+        const infrastructure = analysis?.infrastructure || {};
+        tiResult =
+          resultForIndicator(infrastructure?.threat_intelligence, value) ||
+          resultForIndicator(infrastructure, value);
+      }
+
+      const enrichment = toEnrichment(
+        analysis?.threat_intelligence ||
+          analysis?.infrastructure?.threat_intelligence ||
+          {},
+        tiResult,
+      );
+
+      const caseIds = new Set(existing?.cases || []);
+      if (email.caseId) caseIds.add(email.caseId);
+
+      const current = {
+        value,
+        type: source.type,
+        verdict: deriveIndicatorVerdict(tiResult, emailRisk),
+        firstSeen:
+          existing?.firstSeen ||
+          String(email.receivedAt || email.internalDate || "").slice(0, 10) ||
+          new Date().toISOString().slice(0, 10),
+        sightings: Number(existing?.sightings || 0) + 1,
+        cases: [...caseIds],
+        context:
+          existing?.context ||
+          `Observed in ${email.subject || "analyzed email"}${
+            senderDomain ? ` · ${senderDomain}` : ""
+          }`,
+        enriching: false,
+        enrichment: enrichment || existing?.enrichment || null,
+      };
+
+      if (existing) {
+        const rank = {
+          unknown: 0,
+          suspicious: 1,
+          malicious: 2,
+        };
+
+        if ((rank[current.verdict] || 0) < (rank[existing.verdict] || 0)) {
+          current.verdict = existing.verdict;
+        }
+
+        if (
+          existing.enrichment &&
+          (!current.enrichment ||
+            Number(existing.enrichment.threatScore || 0) >
+              Number(current.enrichment.threatScore || 0))
+        ) {
+          current.enrichment = existing.enrichment;
+        }
+      }
+
+      registry.set(key, current);
+    }
+  }
+
+  return [...registry.values()];
+}
 
 export function DataProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, initialState);
@@ -374,10 +508,6 @@ export function DataProvider({ children }) {
   const [backendError, setBackendError] = useState(null);
 
   const [backendConnected, setBackendConnected] = useState(false);
-
-  /* ==========================================================
-     LOCAL STORAGE HYDRATION
-     ========================================================== */
 
   useEffect(() => {
     let stored = null;
@@ -400,10 +530,6 @@ export function DataProvider({ children }) {
     hydrated.current = true;
   }, []);
 
-  /* ==========================================================
-     LOCAL STORAGE PERSISTENCE
-     ========================================================== */
-
   useEffect(() => {
     if (!hydrated.current || state.revision === 0) {
       return;
@@ -414,27 +540,14 @@ export function DataProvider({ children }) {
         STORAGE_KEY,
         JSON.stringify(serialize(state)),
       );
-    } catch {
-      // Storage is optional.
-    }
+    } catch {}
   }, [state]);
-
-  /* ==========================================================
-     LOAD REAL GMAIL DATA
-     ========================================================== */
 
   const loadGmailMessages = useCallback(async () => {
     setBackendLoading(true);
     setBackendError(null);
 
     try {
-      /*
-       * First request:
-       *
-       * GET /gmail/messages
-       *
-       * This returns Gmail message references.
-       */
       const listResponse = await apiFetch("/gmail/messages?max_results=20");
 
       const messageRefs = Array.isArray(listResponse?.messages)
@@ -445,77 +558,152 @@ export function DataProvider({ children }) {
         `[DataProvider] Gmail list returned ${messageRefs.length} messages.`,
       );
 
-      /*
-       * Second request:
-       *
-       * GET /gmail/messages/{message_id}
-       *
-       * Fetch complete Gmail message information.
-       */
-      const fullMessages = await Promise.all(
-        messageRefs.map(async (item) => {
-          if (!item?.id) {
-            return null;
-          }
+      const fullMessages = [];
+      const CONCURRENCY = 5;
 
-          try {
-            const response = await apiFetch(
-              `/gmail/messages/${encodeURIComponent(item.id)}`,
-            );
+      for (let index = 0; index < messageRefs.length; index += CONCURRENCY) {
+        const batch = messageRefs.slice(index, index + CONCURRENCY);
 
-            return normalizeGmailMessage(response);
-          } catch (error) {
-            console.error(
-              `[DataProvider] Failed to load Gmail message ${item.id}:`,
-              error,
-            );
+        const results = await Promise.all(
+          batch.map(async (item) => {
+            if (!item?.id) return null;
 
-            return null;
-          }
-        }),
-      );
+            try {
+              const response = await apiFetch(
+                `/gmail/messages/${encodeURIComponent(item.id)}`,
+              );
 
-      const emails = fullMessages.filter(Boolean);
+              return normalizeGmailMessage(response);
+            } catch (error) {
+              console.error(
+                `[DataProvider] Failed to load Gmail message ${item.id}:`,
+                error,
+              );
+              return null;
+            }
+          }),
+        );
 
-      /*
-       * Replace the frontend email collection
-       * with the real Gmail records.
-       *
-       * IMPORTANT:
-       * The reducer already supports backend/sync.
-       */
-      if (emails.length > 0) {
-        dispatch({
-          type: "backend/sync",
-          emails,
-        });
+        fullMessages.push(...results.filter(Boolean));
+
+        if (results.some(Boolean)) {
+          dispatch({
+            type: "backend/sync",
+            emails: results.filter(Boolean),
+          });
+        }
       }
 
+      const emails = fullMessages;
+
       setBackendConnected(true);
+      setBackendLoading(false);
 
       console.log(`[DataProvider] Loaded ${emails.length} Gmail messages.`);
+
+      const analyzeInBackground = async () => {
+        const ANALYSIS_CONCURRENCY = 3;
+
+        for (
+          let index = 0;
+          index < emails.length;
+          index += ANALYSIS_CONCURRENCY
+        ) {
+          const batch = emails.slice(index, index + ANALYSIS_CONCURRENCY);
+
+          await Promise.all(
+            batch.map(async (email) => {
+              if (!email?.gmailMessageId) return;
+
+              if (email.analysis) return;
+
+              try {
+                const response = await apiFetch(
+                  `/analysis/gmail/${encodeURIComponent(email.gmailMessageId)}`,
+                  {
+                    method: "POST",
+                  },
+                );
+
+                const analysis = response?.data || response || null;
+
+                if (!analysis) return;
+
+                const analyzedEmail = {
+                  ...email,
+                  analysis,
+                  risk: Number(analysis?.risk?.score ?? email.risk ?? 0),
+                  classification:
+                    analysis?.risk?.classification ||
+                    analysis?.classification ||
+                    "unknown",
+                  authentication:
+                    analysis?.authentication || email.authentication,
+                  identityAnalysis: analysis?.identity_analysis || null,
+                  behavioralAnalysis: analysis?.behavioral_analysis || null,
+                  threatIntelligence: analysis?.threat_intelligence || null,
+                  infrastructure:
+                    analysis?.infrastructure || email.infrastructure || {},
+                  indicators: [
+                    ...(Array.isArray(analysis?.email?.ips)
+                      ? analysis.email.ips
+                      : []),
+                    ...(Array.isArray(analysis?.email?.domains)
+                      ? analysis.email.domains
+                      : []),
+                    ...(Array.isArray(analysis?.email?.urls)
+                      ? analysis.email.urls
+                      : []),
+                  ],
+                  findings: Array.isArray(analysis?.findings)
+                    ? analysis.findings
+                    : [
+                        ...(analysis?.identity_analysis?.findings || []),
+                        ...(analysis?.behavioral_analysis?.findings || []),
+                      ],
+                };
+
+                dispatch({
+                  type: "backend/sync",
+                  emails: [analyzedEmail],
+                  indicators: buildLiveIndicators([analyzedEmail]),
+                });
+              } catch (error) {
+                console.error(
+                  `[DataProvider] Background analysis failed for Gmail message ${email.gmailMessageId}:`,
+                  error,
+                );
+              }
+            }),
+          );
+        }
+
+        console.log(
+          "[DataProvider] Background Gmail forensic analysis complete.",
+        );
+      };
+
+      if (typeof window !== "undefined") {
+        window.setTimeout(analyzeInBackground, 0);
+      } else {
+        analyzeInBackground();
+      }
 
       return emails;
     } catch (error) {
       console.error("[DataProvider] Gmail backend load failed:", error);
 
       setBackendConnected(false);
-
       setBackendError(error);
+      setBackendLoading(false);
 
       return [];
-    } finally {
-      setBackendLoading(false);
     }
   }, []);
 
   useEffect(() => {
     loadGmailMessages();
   }, [loadGmailMessages]);
-
-  /* ==========================================================
-     EMAIL ACTIONS
-     ========================================================== */
 
   const emailById = useCallback(
     (id) =>
@@ -694,10 +882,6 @@ export function DataProvider({ children }) {
     [emailById, push],
   );
 
-  /* ==========================================================
-     INVESTIGATION ACTIONS
-     ========================================================== */
-
   const createCase = useCallback(
     (draft) => {
       dispatch({
@@ -792,10 +976,6 @@ export function DataProvider({ children }) {
     [state.investigations, push],
   );
 
-  /* ==========================================================
-     INDICATOR ACTIONS
-     ========================================================== */
-
   const createIndicator = useCallback(
     (draft) => {
       const exists = state.indicators.some(
@@ -836,36 +1016,140 @@ export function DataProvider({ children }) {
         enriching: true,
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 900));
+      try {
+        const indicator = state.indicators.find((item) => item.value === value);
 
-      const indicator = state.indicators.find((item) => item.value === value);
+        if (!indicator) {
+          throw new Error(`Indicator ${value} is not registered.`);
+        }
 
-      const verdict =
-        indicator?.cases?.length > 1
-          ? "malicious"
-          : indicator?.cases?.length === 1
-            ? "suspicious"
-            : "unknown";
+        const normalizedType = String(indicator.type || "")
+          .trim()
+          .toLowerCase();
 
-      dispatch({
-        type: "indicator/setVerdict",
-        value,
-        verdict,
-      });
+        const payload = {
+          ips: [],
+          domains: [],
+          urls: [],
+        };
 
-      push({
-        title: "Enrichment complete",
-        description:
-          verdict === "unknown"
-            ? `${value} remains unknown — no corroborating sighting.`
-            : `${value} assessed as ${verdict}.`,
-        tone:
-          verdict === "malicious"
-            ? "critical"
-            : verdict === "suspicious"
-              ? "warn"
-              : "info",
-      });
+        if (
+          normalizedType === "ip" ||
+          normalizedType === "ipv4" ||
+          normalizedType === "ipv6"
+        ) {
+          payload.ips = [value];
+        } else if (normalizedType === "domain") {
+          payload.domains = [value];
+        } else if (normalizedType === "url") {
+          payload.urls = [value];
+        } else {
+          throw new Error(
+            `Threat-intelligence enrichment does not support ${indicator.type || "this indicator type"}.`,
+          );
+        }
+
+        const response = await apiFetch("/threat-intelligence/enrich", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const data = response?.data || {};
+
+        const results = [
+          ...(Array.isArray(data.ips) ? data.ips : []),
+          ...(Array.isArray(data.domains) ? data.domains : []),
+          ...(Array.isArray(data.urls) ? data.urls : []),
+        ];
+
+        const enriched = results.find(
+          (entry) =>
+            String(entry?.indicator || "").toLowerCase() ===
+            String(value).toLowerCase(),
+        );
+
+        if (!enriched) {
+          throw new Error(`No enrichment result was returned for ${value}.`);
+        }
+
+        const reputation = String(
+          enriched.reputation || "unknown",
+        ).toLowerCase();
+
+        const threatScore = Number(enriched.threat_score || 0);
+        const sightings = Number(indicator.sightings || 0);
+        const cases = Array.isArray(indicator.cases)
+          ? indicator.cases.length
+          : 0;
+
+        dispatch({
+          type: "indicator/setEnrichment",
+          value,
+          enrichment: toEnrichment(data, enriched, normalizedType),
+        });
+
+        let verdict = "unknown";
+
+        if (
+          reputation === "malicious" &&
+          (threatScore >= 80 || cases > 0 || sightings > 0)
+        ) {
+          verdict = "malicious";
+        } else if (
+          reputation === "malicious" ||
+          reputation === "suspicious" ||
+          enriched.suspicious === true ||
+          threatScore >= 60 ||
+          cases > 0 ||
+          sightings > 0
+        ) {
+          verdict = "suspicious";
+        }
+
+        dispatch({
+          type: "indicator/setVerdict",
+          value,
+          verdict,
+        });
+
+        push({
+          title: "Enrichment complete",
+          description:
+            verdict === "unknown"
+              ? `${value} remains unknown — no corroborating threat evidence.`
+              : `${value} assessed as ${verdict} from live threat intelligence.`,
+          tone:
+            verdict === "malicious"
+              ? "critical"
+              : verdict === "suspicious"
+                ? "warn"
+                : "info",
+        });
+
+        return enriched;
+      } catch (error) {
+        console.error(
+          `[DataProvider] Threat-intelligence enrichment failed for ${value}:`,
+          error,
+        );
+
+        push({
+          title: "Enrichment failed",
+          description: error?.message || `Unable to enrich ${value}.`,
+          tone: "critical",
+        });
+
+        return null;
+      } finally {
+        dispatch({
+          type: "indicator/setEnriching",
+          value,
+          enriching: false,
+        });
+      }
     },
     [state.indicators, push],
   );
@@ -928,10 +1212,6 @@ export function DataProvider({ children }) {
     [state.indicators, push],
   );
 
-  /* ==========================================================
-     REPORT ACTIONS
-     ========================================================== */
-
   const createReport = useCallback(
     (draft) => {
       dispatch({
@@ -991,10 +1271,6 @@ export function DataProvider({ children }) {
     [state.reports, push],
   );
 
-  /* ==========================================================
-     SETTINGS
-     ========================================================== */
-
   const setSetting = useCallback((key, value) => {
     dispatch({
       type: "settings/set",
@@ -1037,9 +1313,7 @@ export function DataProvider({ children }) {
 
     try {
       window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // Nothing to clear.
-    }
+    } catch {}
 
     push({
       title: "Console reset",
@@ -1047,10 +1321,6 @@ export function DataProvider({ children }) {
       tone: "warn",
     });
   }, [push]);
-
-  /* ==========================================================
-     CONTEXT
-     ========================================================== */
 
   const value = useMemo(
     () => ({

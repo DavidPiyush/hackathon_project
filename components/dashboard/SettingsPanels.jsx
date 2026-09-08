@@ -11,46 +11,24 @@ import { Badge } from "@/components/ui/Badge";
 import { Toggle } from "@/components/ui/Interactive";
 import { Spinner, ConfirmInline } from "@/components/ui/Feedback";
 
-/**
- * Settings, backed by the console store.
- *
- * Edits are held locally until saved, so Revert is meaningful and a stray
- * toggle does not immediately change how the engine behaves. Saving commits to
- * the store, which persists to this browser — stated plainly in the banner
- * rather than implying a server round trip.
- */
 export function SettingsPanels() {
   const { settings, actions } = useData();
-
-  const [draft, setDraft] = useState(settings);
-  const [committed, setCommitted] = useState(settings);
+  const [overrides, setOverrides] = useState({});
   const [saving, setSaving] = useState(false);
   const [confirmingReset, setConfirmingReset] = useState(false);
 
-  /**
-   * Adopt committed settings whenever they change from outside this form — the
-   * store hydrating from localStorage on mount, or a reset elsewhere.
-   *
-   * Adjusting state during render is React's documented pattern here, and it
-   * avoids the extra render pass a syncing effect would cost.
-   */
-  if (committed !== settings) {
-    setCommitted(settings);
-    setDraft(settings);
-  }
+  const draft = { ...settings, ...overrides };
 
-  const dirty = Object.keys(draft).some((key) => draft[key] !== settings[key]);
-
+  const dirty = Object.keys(overrides).some(
+    (key) => overrides[key] !== settings[key],
+  );
   const enabledCount = Object.values(draft).filter(Boolean).length;
 
   const save = async () => {
     setSaving(true);
-
-    // Committing is synchronous, but the write is what a real deployment would
-    // send to the server — the brief spinner keeps that mental model honest.
     await new Promise((resolve) => setTimeout(resolve, 350));
-
     actions.saveSettings(draft);
+    setOverrides({});
     setSaving(false);
   };
 
@@ -60,20 +38,18 @@ export function SettingsPanels() {
         <p className="flex items-start gap-3 text-xs leading-6 text-ink-soft">
           <Icon name="info" className="mt-0.5 shrink-0 text-info" />
           <span>
-            Saved settings are stored in this browser. There is no server in
-            this build, so they will not follow you to another device — but they
-            do survive a reload.
+            Settings are currently stored in this browser. Changes survive a
+            reload but are not synchronized to another device or backend
+            account.
           </span>
         </p>
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">
         {settingsGroups.map((group) => {
-          const groupKeys = group.options.map(
-            (option) => `${group.title}:${option.name}`,
-          );
-
-          const activeInGroup = groupKeys.filter((key) => draft[key]).length;
+          const activeInGroup = group.options.filter(
+            (option) => draft[`${group.title}:${option.name}`],
+          ).length;
 
           return (
             <Card key={group.title} className="p-6">
@@ -103,7 +79,10 @@ export function SettingsPanels() {
                       description={option.detail}
                       checked={Boolean(draft[key])}
                       onChange={(next) =>
-                        setDraft((previous) => ({ ...previous, [key]: next }))
+                        setOverrides((previous) => ({
+                          ...previous,
+                          [key]: next,
+                        }))
                       }
                     />
                   );
@@ -114,7 +93,6 @@ export function SettingsPanels() {
         })}
       </div>
 
-      {/* Action bar */}
       <Card className="space-y-4 p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-ink-muted">
@@ -137,7 +115,7 @@ export function SettingsPanels() {
             <Button
               variant="ghost"
               icon="undo"
-              onClick={() => setDraft(settings)}
+              onClick={() => setOverrides({})}
               disabled={!dirty || saving}
             >
               Revert
@@ -152,7 +130,11 @@ export function SettingsPanels() {
               Restore defaults
             </Button>
 
-            <Button icon={saving ? undefined : "save"} onClick={save} disabled={!dirty || saving}>
+            <Button
+              icon={saving ? undefined : "save"}
+              onClick={save}
+              disabled={!dirty || saving}
+            >
               {saving && <Spinner size="xs" />}
               {saving ? "Saving…" : "Save changes"}
             </Button>
@@ -166,13 +148,13 @@ export function SettingsPanels() {
             onCancel={() => setConfirmingReset(false)}
             onConfirm={() => {
               actions.resetSettings();
+              setOverrides({});
               setConfirmingReset(false);
             }}
           />
         )}
       </Card>
 
-      {/* Console-wide reset, kept separate from ordinary settings */}
       <Card tone="critical" className="p-5">
         <CardHeader
           icon="warning"
@@ -184,8 +166,8 @@ export function SettingsPanels() {
 
         <p className="mt-4 text-xs leading-6 text-ink-soft">
           Clears archived and deleted messages, stars, case assignments, added
-          indicators and generated reports from this browser. Nothing on a
-          server is touched, because there is none.
+          indicators and generated reports from this browser. Backend data is
+          not modified by this local console reset.
         </p>
 
         <Button

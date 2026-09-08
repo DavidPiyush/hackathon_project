@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth/dal";
+
 import { Button } from "@/components/ui/Button";
 import { PageHeader, PageBody } from "@/components/dashboard/PageHeader";
 import { SettingsPanels } from "@/components/dashboard/SettingsPanels";
@@ -10,8 +11,6 @@ export const metadata = {
 };
 
 export default async function SettingsPage() {
-  // Authoritative check. Proxy is optimistic; this is what actually gates
-  // the page, per the Next.js auth guidance on layouts.
   await requireUser("/dashboard/settings");
 
   return (
@@ -27,7 +26,7 @@ export default async function SettingsPage() {
         ]}
         actions={
           <Button href="/dashboard/help" variant="secondary" icon="help">
-            Documentation
+            Documentation{" "}
           </Button>
         }
       />

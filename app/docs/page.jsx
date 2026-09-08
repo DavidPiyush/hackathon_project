@@ -17,7 +17,6 @@ export const metadata = {
   alternates: { canonical: "/docs" },
 };
 
-/** In-page navigation, matched to the section ids below. */
 const CONTENTS = [
   { id: "quick-start", name: "Quick start" },
   { id: "risk-score", name: "Reading the risk score" },
@@ -25,6 +24,39 @@ const CONTENTS = [
   { id: "evidence-model", name: "The evidence model" },
   { id: "pipeline", name: "The investigation pipeline" },
   { id: "limits", name: "Known limits" },
+];
+
+const RISK_BANDS = [
+  {
+    range: "90–100",
+    label: "Critical",
+    tone: "critical",
+    note: "Contain first, investigate second",
+  },
+  {
+    range: "75–89",
+    label: "High Risk",
+    tone: "high",
+    note: "Investigate before any user action",
+  },
+  {
+    range: "40–74",
+    label: "Suspicious",
+    tone: "warn",
+    note: "Needs an analyst decision",
+  },
+  {
+    range: "20–39",
+    label: "Low Risk",
+    tone: "info",
+    note: "Logged, no action expected",
+  },
+  {
+    range: "0–19",
+    label: "Safe",
+    tone: "safe",
+    note: "No significant signals fired",
+  },
 ];
 
 export default function DocsPage() {
@@ -43,7 +75,6 @@ export default function DocsPage() {
     >
       <Section size="md">
         <div className="grid gap-12 lg:grid-cols-[16rem_1fr] lg:gap-16">
-          {/* ---- Contents ---- */}
           <nav
             aria-label="On this page"
             className="lg:sticky lg:top-24 lg:self-start"
@@ -83,15 +114,15 @@ export default function DocsPage() {
             <p>
               The fastest way to understand the platform is to run a real
               message through it. Open{" "}
-              <Link href="/dashboard/analysis">Email Analysis</Link>, paste the raw
-              headers of a suspicious email, and read the result.
+              <Link href="/dashboard/analysis">Email Analysis</Link>, paste the
+              raw headers of a suspicious email, and read the result.
             </p>
 
             <p>
               Header parsing happens <em>entirely in your browser</em>. Nothing
               is uploaded, which is the correct handling for evidence you do not
-              yet trust. To see what a full enrichment pass adds, load the sample
-              message on that page.
+              yet trust. To see what a full enrichment pass adds, load the
+              sample message on that page.
             </p>
 
             <ol>
@@ -120,13 +151,7 @@ export default function DocsPage() {
             </p>
 
             <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
-              {[
-                { range: "90–100", label: "Critical", tone: "critical", note: "Contain first, investigate second" },
-                { range: "75–89", label: "High Risk", tone: "high", note: "Investigate before any user action" },
-                { range: "40–74", label: "Suspicious", tone: "warn", note: "Needs an analyst decision" },
-                { range: "20–39", label: "Low Risk", tone: "info", note: "Logged, no action expected" },
-                { range: "0–19", label: "Safe", tone: "safe", note: "No significant signals fired" },
-              ].map((band) => (
+              {RISK_BANDS.map((band) => (
                 <Card key={band.label} className="flex items-center gap-3 p-3">
                   <Badge tone={band.tone} size="sm" dot uppercase>
                     {band.label}

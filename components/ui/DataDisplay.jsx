@@ -37,7 +37,10 @@ export function Meter({
       )}
     >
       <div
-        className={cn("h-full rounded-full transition-[width] duration-700 ease-out", t.fill)}
+        className={cn(
+          "h-full rounded-full transition-[width] duration-700 ease-out",
+          t.fill,
+        )}
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -70,14 +73,7 @@ export function RiskMeter({ score, size = "md", className }) {
   }
 
   return (
-    <div
-      className={cn(
-        "rounded-xl border p-4",
-        t.border,
-        t.bg,
-        className,
-      )}
-    >
+    <div className={cn("rounded-xl border p-4", t.border, t.bg, className)}>
       <div className="flex items-end justify-between gap-4">
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wider text-ink-faint">
@@ -91,7 +87,12 @@ export function RiskMeter({ score, size = "md", className }) {
         </div>
 
         <div className="text-right">
-          <p className={cn("text-xs font-semibold uppercase tracking-wider", t.text)}>
+          <p
+            className={cn(
+              "text-xs font-semibold uppercase tracking-wider",
+              t.text,
+            )}
+          >
             {riskLabel(value)}
           </p>
 
@@ -201,15 +202,22 @@ export function TrendChart({ data, className }) {
       >
         <defs>
           <linearGradient id="trend-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-accent)" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="var(--color-accent)" stopOpacity="0" />
+            <stop
+              offset="0%"
+              stopColor="var(--color-accent)"
+              stopOpacity="0.28"
+            />
+            <stop
+              offset="100%"
+              stopColor="var(--color-accent)"
+              stopOpacity="0"
+            />
           </linearGradient>
         </defs>
 
         {/* Horizontal gridlines */}
         {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-          const y =
-            pad.top + (height - pad.top - pad.bottom) * ratio;
+          const y = pad.top + (height - pad.top - pad.bottom) * ratio;
 
           return (
             <line
@@ -249,8 +257,15 @@ export function TrendChart({ data, className }) {
           const [x, y] = pointAt(i, d.total);
 
           return (
-            <g key={d.day}>
-              <circle cx={x} cy={y} r="3.5" fill="var(--color-base)" stroke="var(--color-accent)" strokeWidth="2" />
+            <g key={d.i}>
+              <circle
+                cx={x}
+                cy={y}
+                r="3.5"
+                fill="var(--color-base)"
+                stroke="var(--color-accent)"
+                strokeWidth="2"
+              />
 
               <text
                 x={x}
@@ -316,7 +331,10 @@ export function Timeline({ items, className }) {
   return (
     <ol className={cn("relative space-y-0", className)}>
       {items.map((item, index) => (
-        <li key={`${item.time}-${item.action}`} className="relative flex gap-4 pb-6 last:pb-0">
+        <li
+          key={`${item.time}-${item.action}`}
+          className="relative flex gap-4 pb-6 last:pb-0"
+        >
           {/* Connector line, stopped before the final node */}
           {index < items.length - 1 && (
             <span
@@ -340,7 +358,9 @@ export function Timeline({ items, className }) {
                 {item.time}
               </span>
 
-              <span className="text-xs font-medium text-ink">{item.action}</span>
+              <span className="text-xs font-medium text-ink">
+                {item.action}
+              </span>
 
               <span className="rounded border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-ink-faint">
                 {item.actor}

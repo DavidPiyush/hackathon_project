@@ -23,17 +23,22 @@ const VERDICT_FILTERS = [
   { id: "unknown", label: "Unknown" },
 ];
 
-const INDICATOR_TYPES = ["Domain", "IPv4", "IPv6", "URL", "MD5", "SHA-256", "Email"];
+const INDICATOR_TYPES = [
+  "Domain",
+  "IPv4",
+  "IPv6",
+  "URL",
+  "MD5",
+  "SHA-256",
+  "Email",
+];
 
 const VERDICTS = ["malicious", "suspicious", "benign", "unknown"];
-
-/**
- * Indicator registry with full CRUD.
- *
- * Add an indicator, run enrichment against it, override the verdict, or remove
- * it. Everything persists in the browser and every destructive action can be
- * undone from its toast.
- */
+const enrichmentTone = (reputation) => {
+  if (reputation === "malicious") return "critical";
+  if (reputation === "suspicious") return "warn";
+  return "neutral";
+};
 export function IndicatorRegistry() {
   const { indicators, investigations, actions } = useData();
 
@@ -103,7 +108,6 @@ export function IndicatorRegistry() {
   return (
     <>
       <Card padded={false} className="overflow-hidden">
-        {/* Controls */}
         <div className="flex flex-col gap-4 border-b border-line p-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-2">
             <Icon name="filter" className="text-xs text-ink-faint" />
@@ -170,6 +174,7 @@ export function IndicatorRegistry() {
                       "Indicator",
                       "Type",
                       "Verdict",
+                      "Threat intelligence",
                       "First seen",
                       "Sightings",
                       "Cases",
@@ -232,9 +237,6 @@ export function IndicatorRegistry() {
                             {entry.type}
                           </Badge>
                         </td>
-
-                        {/* Verdict is editable — an analyst overrides the
-                            engine, not the other way round. */}
                         <td className="px-5 py-4">
                           {entry.enriching ? (
                             <span className="flex items-center gap-2 text-[11px] text-accent">
@@ -307,6 +309,81 @@ export function IndicatorRegistry() {
                           )}
                         </td>
 
+                        <td className="px-5 py-4">
+                          {entry.enrichment ? (
+                            <div className="min-w-[11rem] space-y-1.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs font-semibold text-ink">
+                                  {Number(entry.enrichment.threatScore ?? 0)}
+                                  /100
+                                </span>
+
+                                <Badge
+                                  tone={
+                                    entry.enrichment.reputation === "malicious"
+                                      ? "critical"
+                                      : entry.enrichment.reputation ===
+                                          "suspicious"
+                                        ? "warn"
+                                        : "neutral"
+                                  }
+                                  size="xs"
+                                  uppercase
+                                >
+                                  {entry.enrichment.reputation || "unknown"}
+                                </Badge>
+                              </div>
+
+                              <div className="text-[10px] text-ink-muted">
+                                {(entry.enrichment.evidence || []).length}{" "}
+                                evidence
+                                {" · "}
+                                {
+                                  Object.keys(entry.enrichment.providers || {})
+                                    .length
+                                }{" "}
+                                provider
+                                {Object.keys(entry.enrichment.providers || {})
+                                  .length === 1
+                                  ? ""
+                                  : "s"}
+                              </div>
+
+                              {entry.enrichment.indicatorType === "ip" &&
+                              entry.enrichment.organization ? (
+                                <div className="truncate text-[10px] text-ink-faint">
+                                  {entry.enrichment.organization}
+                                  {entry.enrichment.asn
+                                    ? ` · AS${entry.enrichment.asn}`
+                                    : ""}
+                                </div>
+                              ) : null}
+
+                              {entry.enrichment.indicatorType === "domain" &&
+                              entry.enrichment.resolutions?.length ? (
+                                <div className="text-[10px] text-ink-faint">
+                                  {entry.enrichment.resolutions.length} DNS
+                                  record
+                                  {entry.enrichment.resolutions.length === 1
+                                    ? ""
+                                    : "s"}
+                                </div>
+                              ) : null}
+
+                              {entry.enrichment.indicatorType === "url" &&
+                              entry.enrichment.domain ? (
+                                <div className="truncate text-[10px] text-ink-faint">
+                                  {entry.enrichment.domain}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-ink-faint">
+                              Not enriched
+                            </span>
+                          )}
+                        </td>
+
                         <td className="ioc px-5 py-4 text-ink-muted">
                           {entry.firstSeen}
                         </td>
@@ -317,7 +394,9 @@ export function IndicatorRegistry() {
 
                         <td className="px-5 py-4">
                           {(entry.cases ?? []).length === 0 ? (
-                            <span className="text-[11px] text-ink-faint">—</span>
+                            <span className="text-[11px] text-ink-faint">
+                              —
+                            </span>
                           ) : (
                             <ul className="space-y-1">
                               {entry.cases.map((caseId) => (
@@ -359,6 +438,148 @@ export function IndicatorRegistry() {
               </table>
             </div>
 
+            {filtered.some((entry) => entry.enrichment) ? (
+              <div className="border-t border-line bg-sunken/40 p-5">
+                <div className="mb-4 flex items-center gap-2">
+                  <Icon name="shield" className="text-xs text-accent" />
+                  <div>
+                    <h3 className="text-sm font-semibold text-ink">
+                      Live enrichment evidence
+                    </h3>
+                    <p className="mt-0.5 text-[11px] text-ink-muted">
+                      Provider observations retained with the indicator record.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {filtered
+                    .filter((entry) => entry.enrichment)
+                    .map((entry) => {
+                      const intel = entry.enrichment;
+                      const providers = Object.entries(intel.providers ?? {});
+
+                      return (
+                        <article
+                          key={`intel-${entry.value}`}
+                          className="rounded-xl border border-line bg-raise p-4"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="ioc truncate text-sm font-semibold text-ink">
+                                {entry.value}
+                              </p>
+                              <p className="mt-1 text-[10px] uppercase tracking-wider text-ink-faint">
+                                {intel.indicatorType || entry.type}
+                              </p>
+                            </div>
+
+                            <Badge
+                              tone={enrichmentTone(intel.reputation)}
+                              size="xs"
+                              uppercase
+                            >
+                              {intel.reputation || "unknown"}
+                            </Badge>
+                          </div>
+
+                          <div className="mt-4 grid grid-cols-2 gap-2">
+                            <div className="rounded-lg border border-line bg-sunken p-2">
+                              <p className="text-[9px] uppercase tracking-wider text-ink-faint">
+                                Threat score
+                              </p>
+                              <p className="mt-1 font-mono text-xs font-semibold text-ink">
+                                {Number(intel.threatScore ?? 0)}/100
+                              </p>
+                            </div>
+
+                            <div className="rounded-lg border border-line bg-sunken p-2">
+                              <p className="text-[9px] uppercase tracking-wider text-ink-faint">
+                                Evidence
+                              </p>
+                              <p className="mt-1 font-mono text-xs font-semibold text-ink">
+                                {(intel.evidence || []).length}
+                              </p>
+                            </div>
+
+                            {intel.indicatorType === "ip" ? (
+                              <>
+                                <div className="rounded-lg border border-line bg-sunken p-2">
+                                  <p className="text-[9px] uppercase tracking-wider text-ink-faint">
+                                    ASN
+                                  </p>
+                                  <p className="mt-1 font-mono text-xs text-ink">
+                                    {intel.asn ? `AS${intel.asn}` : "Unknown"}
+                                  </p>
+                                </div>
+
+                                <div className="rounded-lg border border-line bg-sunken p-2">
+                                  <p className="text-[9px] uppercase tracking-wider text-ink-faint">
+                                    Reports
+                                  </p>
+                                  <p className="mt-1 font-mono text-xs text-ink">
+                                    {Number(
+                                      intel.reports ?? 0,
+                                    ).toLocaleString()}
+                                  </p>
+                                </div>
+                              </>
+                            ) : null}
+                          </div>
+
+                          {providers.length ? (
+                            <div className="mt-4">
+                              <p className="text-[9px] uppercase tracking-wider text-ink-faint">
+                                Providers
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {providers.map(([provider]) => (
+                                  <Badge key={provider} tone="info" size="xs">
+                                    {provider}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {(intel.evidence || []).length ? (
+                            <div className="mt-4 space-y-2">
+                              {intel.evidence.slice(0, 3).map((item, index) => (
+                                <div
+                                  key={`${item.provider}-${item.observed_at}-${index}`}
+                                  className="rounded-lg border border-line bg-sunken px-3 py-2"
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <span className="text-[10px] font-semibold text-ink">
+                                      {item.provider || "Unknown provider"}
+                                    </span>
+                                    <span className="font-mono text-[9px] text-ink-faint">
+                                      {item.observed_at ||
+                                        "timestamp unavailable"}
+                                    </span>
+                                  </div>
+                                  {item.source ? (
+                                    <p className="mt-1 truncate font-mono text-[9px] text-ink-faint">
+                                      {item.source}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {(intel.errors || []).length ? (
+                            <div className="mt-3 rounded-lg border border-warn/20 bg-warn/5 p-3 text-[10px] leading-4 text-ink-soft">
+                              {intel.errors.join(" · ")}
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })}
+                </div>
+              </div>
+            ) : null}
+
             {confirming && (
               <div className="border-t border-line p-4">
                 <ConfirmInline
@@ -387,8 +608,6 @@ export function IndicatorRegistry() {
           </>
         )}
       </Card>
-
-      {/* ================= ADD INDICATOR ================= */}
       <Modal
         open={adding}
         onClose={() => {

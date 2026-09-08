@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useData } from "@/components/providers/DataProvider";
+
 import { cn } from "@/lib/utils/cn";
 import { site, dashboardNav, dashboardUtilityNav } from "@/lib/data/site";
-import { emails } from "@/lib/data/emails";
 import { riskTone } from "@/lib/utils/risk";
 import { initials } from "@/lib/utils/format";
 import { logoutAction } from "@/lib/actions/auth";
@@ -15,41 +16,16 @@ import { IconButton, Button } from "@/components/ui/Button";
 import { Badge, StatusDot } from "@/components/ui/Badge";
 import { Popover } from "@/components/ui/Popover";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-
-/** Header height, shared by the sticky sidebar offset so the two stay aligned. */
 const HEADER_H = "h-16";
 const HEADER_PX = 64;
-
-/**
- * Dashboard chrome: top header, sidebar, mobile drawer.
- *
- * The mobile drawer is why this is one client component rather than two — the
- * hamburger lives in the header and the drawer is the sidebar, so a single
- * owner of the open state is simpler than lifting it through context. Page
- * content is passed straight through as `children`, so pages themselves stay
- * server components.
- *
- * `user` is resolved server-side by the layout and passed in as a prop —
- * client components cannot import the auth DAL, and the shell needs the
- * identity for the account menu.
- */
 export function DashboardShell({ children, user }) {
   const pathname = usePathname();
-
-  /**
-   * The drawer records which route it was opened on, so navigating away closes
-   * it as a derived value. Resetting it from an effect on `pathname` would
-   * work, but it costs a second render pass on every navigation — and React
-   * warns against synchronous setState inside an effect for exactly that
-   * reason.
-   */
+  const { emails, backendConnected, backendLoading, backendError } = useData();
   const [drawer, setDrawer] = useState({ open: false, path: pathname });
 
   const drawerOpen = drawer.open && drawer.path === pathname;
 
   const setDrawerOpen = (open) => setDrawer({ open, path: pathname });
-
-  /** Lock background scroll while the drawer covers the screen. */
   useEffect(() => {
     if (!drawerOpen) {
       return;
@@ -73,17 +49,26 @@ export function DashboardShell({ children, user }) {
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [drawerOpen]);
-
-  /**
-   * A nav item is active on an exact match, or when the current path is nested
-   * beneath it. `/dashboard` is excluded from the prefix rule, otherwise it
-   * would stay highlighted on every child page.
-   */
   const isActive = (href) =>
     pathname === href ||
     (href !== "/dashboard" && pathname.startsWith(`${href}/`));
 
-  const alerts = emails.filter((email) => email.risk >= 75).slice(0, 4);
+  const alerts = emails
+    .filter((email) => !email.deleted && !email.archived && email.risk >= 75)
+    .sort((a, b) => b.risk - a.risk)
+    .slice(0, 4);
+
+  const environmentTone = backendLoading
+    ? "warn"
+    : backendConnected
+      ? "safe"
+      : "critical";
+
+  const environmentLabel = backendLoading
+    ? "Checking"
+    : backendConnected
+      ? "Operational"
+      : "Offline";
 
   return (
     <div className="min-h-dvh bg-canvas">
@@ -126,8 +111,8 @@ export function DashboardShell({ children, user }) {
           <div className="ml-auto flex items-center gap-2">
             {/* Environment status */}
             <span className="hidden items-center gap-2 rounded-lg border border-line px-3 py-2 text-xs text-ink-muted md:flex">
-              <StatusDot tone="safe" />
-              Operational
+              <StatusDot tone={environmentTone} />
+              {environmentLabel}
             </span>
 
             {/* Theme: segmented on wide screens, single toggle on narrow */}
@@ -161,30 +146,36 @@ export function DashboardShell({ children, user }) {
                 </p>
               </div>
 
-              <ul className="max-h-72 divide-y divide-line overflow-y-auto">
-                {alerts.map((alert) => (
-                  <li key={alert.id}>
-                    <Link
-                      href="/dashboard/inbox"
-                      className="block px-4 py-3 transition duration-200 hover:bg-elevated"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="min-w-0 truncate text-xs font-medium text-ink">
-                          {alert.subject}
+              {alerts.length > 0 ? (
+                <ul className="max-h-72 divide-y divide-line overflow-y-auto">
+                  {alerts.map((alert) => (
+                    <li key={alert.id}>
+                      <Link
+                        href="/dashboard/inbox"
+                        className="block px-4 py-3 transition duration-200 hover:bg-elevated"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="min-w-0 truncate text-xs font-medium text-ink">
+                            {alert.subject}
+                          </p>
+
+                          <Badge tone={riskTone(alert.risk)} size="xs">
+                            {alert.risk}
+                          </Badge>
+                        </div>
+
+                        <p className="ioc mt-1 truncate text-ink-faint">
+                          {alert.senderEmail}
                         </p>
-
-                        <Badge tone={riskTone(alert.risk)} size="xs">
-                          {alert.risk}
-                        </Badge>
-                      </div>
-
-                      <p className="ioc mt-1 truncate text-ink-faint">
-                        {alert.senderEmail}
-                      </p>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="px-4 py-6 text-center text-xs text-ink-muted">
+                  No high-risk messages in the current inbox.
+                </div>
+              )}
 
               <div className="border-t border-line p-3">
                 <Button
@@ -328,8 +319,6 @@ export function DashboardShell({ children, user }) {
     </div>
   );
 }
-
-/** Sidebar contents, shared by the desktop rail and the mobile drawer. */
 function SidebarBody({ isActive }) {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto p-4">

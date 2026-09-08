@@ -14,6 +14,13 @@ export const metadata = {
   alternates: { canonical: "/docs/api" },
 };
 
+const RATE_LIMITS = [
+  { label: "Message submission", value: "60 / min" },
+  { label: "Result retrieval", value: "600 / min" },
+  { label: "Registry queries", value: "300 / min" },
+  { label: "Report generation", value: "10 / min" },
+];
+
 const ENDPOINTS = [
   {
     method: "POST",
@@ -74,7 +81,6 @@ export default function ApiDocsPage() {
       ]}
     >
       <Section size="md">
-        {/* Status notice — this API is specified, not deployed. */}
         <Card tone="warn" className="p-5">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-warn/10 text-warn">
@@ -87,16 +93,17 @@ export default function ApiDocsPage() {
               </p>
 
               <p className="mt-2 max-w-3xl text-xs leading-6 text-ink-soft">
-                The current build is a front end with no deployed backend. These
-                routes document the intended contract so the interface and the
-                API stay in step — calling them today will not succeed. The{" "}
+                These <code>/v1</code> routes describe the planned external API
+                contract. The current console uses the FastAPI backend directly,
+                with its active routes documented separately from this versioned
+                contract. For an immediate end-to-end analysis, use the{" "}
                 <Link
                   href="/dashboard/analysis"
                   className="font-medium text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
                 >
-                  in-browser analyzer
+                  Email Analysis
                 </Link>{" "}
-                does work, and needs no API at all.
+                console flow.
               </p>
             </div>
           </div>
@@ -173,9 +180,9 @@ Subject: Urgent Invoice Payment Required
 
             <p>
               The result mirrors what the console shows, including the evidence
-              classification on every finding. Note that{" "}
-              <code>unknown</code> is a first-class value — clients must handle
-              it rather than treating a missing verdict as benign.
+              classification on every finding. Note that <code>unknown</code> is
+              a first-class value — clients must handle it rather than treating
+              a missing verdict as benign.
             </p>
 
             <pre>
@@ -208,9 +215,9 @@ Subject: Urgent Invoice Payment Required
 
             <p>
               Errors use standard status codes with a machine-readable{" "}
-              <code>code</code> and a human-readable <code>message</code>.
-              Rate limits return <code>429</code> with a{" "}
-              <code>Retry-After</code> header.
+              <code>code</code> and a human-readable <code>message</code>. Rate
+              limits return <code>429</code> with a <code>Retry-After</code>{" "}
+              header.
             </p>
 
             <ul>
@@ -232,13 +239,11 @@ Subject: Urgent Invoice Payment Required
                 <code>409</code> — the case is finalised and cannot be modified
               </li>
               <li>
-                <code>429</code> — rate limited; honour{" "}
-                <code>Retry-After</code>
+                <code>429</code> — rate limited; honour <code>Retry-After</code>
               </li>
             </ul>
           </Prose>
 
-          {/* ---- Sidebar ---- */}
           <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
             <Card className="p-5">
               <CardHeader
@@ -249,19 +254,12 @@ Subject: Urgent Invoice Payment Required
               />
 
               <dl className="mt-5 space-y-2.5">
-                {[
-                  { label: "Message submission", value: "60 / min" },
-                  { label: "Result retrieval", value: "600 / min" },
-                  { label: "Registry queries", value: "300 / min" },
-                  { label: "Report generation", value: "10 / min" },
-                ].map((item) => (
+                {RATE_LIMITS.map((item) => (
                   <div
                     key={item.label}
                     className="flex items-center justify-between gap-3 rounded-lg border border-line bg-raise px-3 py-2"
                   >
-                    <dt className="text-[11px] text-ink-faint">
-                      {item.label}
-                    </dt>
+                    <dt className="text-[11px] text-ink-faint">{item.label}</dt>
                     <dd className="ioc font-semibold text-ink-soft">
                       {item.value}
                     </dd>

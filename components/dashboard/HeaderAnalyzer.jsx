@@ -19,13 +19,6 @@ import { RiskMeter, Meter } from "@/components/ui/DataDisplay";
 import { IndicatorRow, CopyButton } from "@/components/ui/Interactive";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
-/**
- * ============================================================
- * HELPERS
- * ============================================================
- */
-
 function normalizeBackendAuthentication(authentication) {
   if (!authentication) {
     return {
@@ -147,6 +140,10 @@ function normalizeBackendResult(data) {
 
     authentication: normalizeBackendAuthentication(authentication),
 
+    identityAnalysis: data?.identity_analysis || null,
+    behavioralAnalysis: data?.behavioral_analysis || null,
+    threatIntelligence: data?.threat_intelligence || null,
+
     hops: hops.map((hop, index) => ({
       hop: hop?.hop || index + 1,
 
@@ -196,19 +193,29 @@ function normalizeBackendResult(data) {
     backend: data,
   };
 }
+function EnrichmentStatus({ label, value }) {
+  const available =
+    value && typeof value === "object"
+      ? Object.keys(value).length > 0
+      : Boolean(value);
 
-/**
- * ============================================================
- * LIVE HEADER ANALYZER
- * ============================================================
- *
- * Stage 1:
- * Local header analysis gives the analyst immediate feedback.
- *
- * Stage 2:
- * The same evidence is sent to the existing FastAPI
- * /analysis/email endpoint for deeper forensic analysis.
- */
+  return (
+    <div className="rounded-lg border border-line bg-raise p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-ink">{label}</span>
+        <Badge tone={available ? "safe" : "neutral"} size="xs">
+          {available ? "Available" : "Not returned"}
+        </Badge>
+      </div>
+      <p className="mt-2 text-[11px] leading-5 text-ink-muted">
+        {available
+          ? "Backend evidence is available for this analysis."
+          : "The analysis response did not include this section."}
+      </p>
+    </div>
+  );
+}
+
 export function HeaderAnalyzer() {
   const [raw, setRaw] = useState("");
   const [result, setResult] = useState(null);
@@ -217,12 +224,6 @@ export function HeaderAnalyzer() {
   const [loading, setLoading] = useState(false);
 
   const [backendError, setBackendError] = useState("");
-
-  /**
-   * ----------------------------------------------------------
-   * Local analysis
-   * ----------------------------------------------------------
-   */
   const runLocalAnalysis = (input) => {
     const value = input ?? raw;
 
@@ -241,12 +242,6 @@ export function HeaderAnalyzer() {
 
     return parsed;
   };
-
-  /**
-   * ----------------------------------------------------------
-   * Backend analysis
-   * ----------------------------------------------------------
-   */
   const runBackendAnalysis = async (value) => {
     setLoading(true);
     setBackendError("");
@@ -295,11 +290,6 @@ export function HeaderAnalyzer() {
       const normalized = normalizeBackendResult(data);
 
       setBackendResult(normalized);
-
-      /*
-       * Backend analysis becomes the authoritative
-       * enriched result when available.
-       */
       setResult(normalized);
 
       return normalized;
@@ -315,12 +305,6 @@ export function HeaderAnalyzer() {
       setLoading(false);
     }
   };
-
-  /**
-   * ----------------------------------------------------------
-   * ANALYZE
-   * ----------------------------------------------------------
-   */
   const analyze = async (input) => {
     const value = input ?? raw;
 
@@ -332,27 +316,13 @@ export function HeaderAnalyzer() {
 
       return;
     }
-
-    /*
-     * First show the local result immediately.
-     */
     const local = runLocalAnalysis(value);
 
     if (!local?.ok) {
       return;
     }
-
-    /*
-     * Then run deeper backend analysis.
-     */
     await runBackendAnalysis(value);
   };
-
-  /**
-   * ----------------------------------------------------------
-   * SAMPLE
-   * ----------------------------------------------------------
-   */
   const loadSample = async () => {
     setRaw(SAMPLE_HEADERS);
 
@@ -360,20 +330,8 @@ export function HeaderAnalyzer() {
 
     setResult(local);
     setBackendError("");
-
-    /*
-     * The sample contains complete headers only,
-     * so the backend receives the same RFC-style
-     * evidence for server-side enrichment.
-     */
     await runBackendAnalysis(SAMPLE_HEADERS);
   };
-
-  /**
-   * ----------------------------------------------------------
-   * RESET
-   * ----------------------------------------------------------
-   */
   const reset = () => {
     setRaw("");
     setResult(null);

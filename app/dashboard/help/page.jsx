@@ -1,6 +1,8 @@
 import { requireUser } from "@/lib/auth/dal";
+
 import { helpTopics, faqs } from "@/lib/data/dashboard";
 import { site } from "@/lib/data/site";
+
 import { Icon } from "@/components/ui/Icon";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -14,18 +16,44 @@ export const metadata = {
     "Guides, keyboard shortcuts and answers to the questions analysts ask most.",
 };
 
-/** Shortcuts that the interface genuinely supports. */
 const SHORTCUTS = [
   { keys: ["Esc"], action: "Close the open dialog or menu" },
-  { keys: ["Tab"], action: "Move through controls; focus stays inside a dialog" },
-  { keys: ["←", "→"], action: "Move between inbox category tabs" },
-  { keys: ["Home", "End"], action: "Jump to the first or last category tab" },
-  { keys: ["Enter", "Space"], action: "Activate the focused control" },
+  {
+    keys: ["Tab"],
+    action: "Move through controls; focus stays inside a dialog",
+  },
+  {
+    keys: ["←", "→"],
+    action: "Move between inbox category tabs",
+  },
+  {
+    keys: ["Home", "End"],
+    action: "Jump to the first or last category tab",
+  },
+  {
+    keys: ["Enter", "Space"],
+    action: "Activate the focused control",
+  },
+];
+
+const INCIDENT_STEPS = [
+  "Contain the account before investigating — rotate credentials and revoke sessions.",
+  "Preserve the original message; do not forward it as an attachment-stripped copy.",
+  "Record the message ID so the routing path can be reconstructed later.",
+  "Then open a case and attach the evidence.",
+];
+
+const PLATFORM_INFO = [
+  { label: "Product", getValue: (platform) => platform.name },
+  { label: "Detection engine", value: "v4.2" },
+  { label: "Evidence schema", value: "2026.09" },
+  {
+    label: "Support",
+    getValue: (platform) => platform.contactEmail,
+  },
 ];
 
 export default async function HelpPage() {
-  // Authoritative check. Proxy is optimistic; this is what actually gates
-  // the page, per the Next.js auth guidance on layouts.
   await requireUser("/dashboard/help");
 
   return (
@@ -37,10 +65,11 @@ export default async function HelpPage() {
         description="How to read what the platform tells you — including the places where a confident-looking signal proves less than it appears to."
         actions={
           <>
+            {" "}
             <Button href="/docs" icon="book">
-              Full documentation
+              Full documentation{" "}
             </Button>
-
+            ```
             <Button href="/#contact" variant="secondary" icon="envelope">
               Contact the team
             </Button>
@@ -49,7 +78,6 @@ export default async function HelpPage() {
       />
 
       <PageBody className="space-y-6">
-        {/* ================= TOPICS ================= */}
         <section aria-labelledby="topics-heading">
           <h2 id="topics-heading" className="text-lg font-semibold text-ink">
             Start here
@@ -82,7 +110,6 @@ export default async function HelpPage() {
           </div>
         </section>
 
-        {/* ================= FAQ + SHORTCUTS ================= */}
         <div className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
           <section aria-labelledby="faq-heading">
             <h2 id="faq-heading" className="text-lg font-semibold text-ink">
@@ -93,7 +120,6 @@ export default async function HelpPage() {
           </section>
 
           <div className="space-y-5">
-            {/* Keyboard shortcuts */}
             <Card className="p-6">
               <CardHeader
                 icon="key"
@@ -127,7 +153,6 @@ export default async function HelpPage() {
               </dl>
             </Card>
 
-            {/* Escalation */}
             <Card tone="critical" className="p-6">
               <CardHeader
                 icon="warning"
@@ -138,12 +163,7 @@ export default async function HelpPage() {
               />
 
               <ol className="mt-5 space-y-3">
-                {[
-                  "Contain the account before investigating — rotate credentials and revoke sessions.",
-                  "Preserve the original message; do not forward it as an attachment-stripped copy.",
-                  "Record the message ID so the routing path can be reconstructed later.",
-                  "Then open a case and attach the evidence.",
-                ].map((step, index) => (
+                {INCIDENT_STEPS.map((step, index) => (
                   <li key={step} className="flex items-start gap-3">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-critical/25 bg-critical/10 font-mono text-[10px] font-bold text-critical">
                       {index + 1}
@@ -165,7 +185,6 @@ export default async function HelpPage() {
               </Button>
             </Card>
 
-            {/* Platform info */}
             <Card className="p-6">
               <CardHeader
                 icon="info"
@@ -175,20 +194,22 @@ export default async function HelpPage() {
               />
 
               <dl className="mt-5 space-y-2.5">
-                {[
-                  { label: "Product", value: site.name },
-                  { label: "Detection engine", value: "v4.2" },
-                  { label: "Evidence schema", value: "2026.09" },
-                  { label: "Support", value: site.contactEmail },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-line bg-raise px-3 py-2"
-                  >
-                    <dt className="text-[11px] text-ink-faint">{item.label}</dt>
-                    <dd className="ioc truncate text-ink-soft">{item.value}</dd>
-                  </div>
-                ))}
+                {PLATFORM_INFO.map((item) => {
+                  const value = item.getValue?.(site) ?? item.value;
+
+                  return (
+                    <div
+                      key={item.label}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-line bg-raise px-3 py-2"
+                    >
+                      <dt className="text-[11px] text-ink-faint">
+                        {item.label}
+                      </dt>
+
+                      <dd className="ioc truncate text-ink-soft">{value}</dd>
+                    </div>
+                  );
+                })}
               </dl>
 
               <p className="mt-4 flex items-center gap-2">

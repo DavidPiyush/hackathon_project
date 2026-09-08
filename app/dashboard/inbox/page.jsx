@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth/dal";
+
 import { Button } from "@/components/ui/Button";
 import { PageHeader, PageBody } from "@/components/dashboard/PageHeader";
 import { InboxClient } from "@/components/dashboard/InboxClient";
@@ -9,17 +10,7 @@ export const metadata = {
     "Triage incoming messages by risk score, with full forensic evidence one click away.",
 };
 
-/**
- * Inbox page.
- *
- * The stat tiles live inside `InboxClient` rather than here, because they have
- * to react to archiving, deleting and case assignment. Rendering them on the
- * server would freeze them at the seed values and let them contradict the list
- * directly beneath.
- */
 export default async function InboxPage() {
-  // Authoritative check. Proxy is optimistic; this is what actually gates
-  // the page, per the Next.js auth guidance on layouts.
   await requireUser("/dashboard/inbox");
 
   return (
@@ -31,11 +22,16 @@ export default async function InboxPage() {
         description="Messages ranked by risk score. Star, archive, mark read, assign to a case or delete — every action can be undone, and changes persist in this browser."
         actions={
           <>
+            {" "}
             <Button href="/dashboard/analysis" icon="upload">
-              Submit an email
+              Submit an email{" "}
             </Button>
-
-            <Button href="/dashboard/investigations" variant="secondary" icon="folder">
+            ```
+            <Button
+              href="/dashboard/investigations"
+              variant="secondary"
+              icon="folder"
+            >
               Investigations
             </Button>
           </>
