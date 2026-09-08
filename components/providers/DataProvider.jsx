@@ -17,6 +17,7 @@ import {
   serialize,
   STORAGE_KEY,
 } from "@/lib/store/reducer";
+import { STATUS_LABELS } from "@/lib/api/schema";
 import { useToast } from "@/components/providers/ToastProvider";
 
 const DataContext = createContext(null);
@@ -233,27 +234,27 @@ export function DataProvider({ children }) {
     [push],
   );
 
-  const setCaseState = useCallback(
-    (id, nextState) => {
-      const previous = state.investigations.find((item) => item.id === id);
+  const setCaseStatus = useCallback(
+    (id, nextStatus) => {
+      const previous = state.investigations.find((item) => item.case_id === id);
 
-      dispatch({ type: "case/setState", id, state: nextState });
+      dispatch({ type: "case/setStatus", id, status: nextStatus });
 
       push({
-        title: `${id} — ${nextState}`,
+        title: `${id} — ${STATUS_LABELS[nextStatus] ?? nextStatus}`,
         description:
-          nextState === "Closed"
+          nextStatus === "closed"
             ? "Closed. The report and audit trail stay attached."
             : undefined,
-        tone: nextState === "Closed" ? "safe" : "info",
+        tone: nextStatus === "closed" ? "safe" : "info",
         action: previous
           ? {
               label: "Undo",
               onClick: () =>
                 dispatch({
-                  type: "case/setState",
+                  type: "case/setStatus",
                   id,
-                  state: previous.state,
+                  status: previous.status,
                 }),
             }
           : undefined,
@@ -264,7 +265,7 @@ export function DataProvider({ children }) {
 
   const deleteCase = useCallback(
     (id) => {
-      const item = state.investigations.find((entry) => entry.id === id);
+      const item = state.investigations.find((entry) => entry.case_id === id);
 
       dispatch({ type: "case/delete", id });
 
@@ -429,6 +430,7 @@ export function DataProvider({ children }) {
 
   const deleteReport = useCallback(
     (id) => {
+      // Reports are keyed by their own `id`; only investigations use `case_id`.
       const item = state.reports.find((entry) => entry.id === id);
 
       dispatch({ type: "report/delete", id });
@@ -502,7 +504,7 @@ export function DataProvider({ children }) {
         assignCase,
         createCase,
         updateCase,
-        setCaseState,
+        setCaseStatus,
         deleteCase,
         createIndicator,
         enrichIndicator,
@@ -529,7 +531,7 @@ export function DataProvider({ children }) {
       assignCase,
       createCase,
       updateCase,
-      setCaseState,
+      setCaseStatus,
       deleteCase,
       createIndicator,
       enrichIndicator,

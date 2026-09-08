@@ -36,18 +36,33 @@ const { LoginForm } = await import("@/components/auth/LoginForm");
 const { SignupForm } = await import("@/components/auth/SignupForm");
 const { PasswordField } = await import("@/components/auth/PasswordField");
 
-const DEMO = { email: "analyst@threatdetect.com", password: "evidence-first-2026" };
+const ACCOUNTS = [
+  {
+    email: "analyst@threatdetect.com",
+    password: "evidence-first-2026",
+    label: "Analyst",
+    description: "Day-to-day triage and investigation.",
+  },
+  {
+    email: "lead@threatdetect.com",
+    password: "chain-of-custody-2026",
+    label: "DFIR Lead",
+    description: "Can also finalise reports and close cases.",
+  },
+];
+
+const DEMO = ACCOUNTS[0];
 
 describe("LoginForm", () => {
   it("labels both credentials fields", () => {
-    render(<LoginForm demo={DEMO} />);
+    render(<LoginForm accounts={ACCOUNTS} />);
 
     expect(screen.getByLabelText(/email address/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^Password/, { selector: "input" })).toBeInTheDocument();
   });
 
   it("uses the correct autocomplete hints so password managers work", () => {
-    render(<LoginForm demo={DEMO} />);
+    render(<LoginForm accounts={ACCOUNTS} />);
 
     expect(screen.getByLabelText(/email address/i)).toHaveAttribute(
       "autocomplete",
@@ -61,13 +76,13 @@ describe("LoginForm", () => {
   });
 
   it("masks the password by default", () => {
-    render(<LoginForm demo={DEMO} />);
+    render(<LoginForm accounts={ACCOUNTS} />);
 
     expect(screen.getByLabelText(/^Password/, { selector: "input" })).toHaveAttribute("type", "password");
   });
 
   it("reveals and re-hides the password on request", async () => {
-    render(<LoginForm demo={DEMO} />);
+    render(<LoginForm accounts={ACCOUNTS} />);
 
     await userEvent.click(screen.getByRole("button", { name: "Show password" }));
 
@@ -80,7 +95,7 @@ describe("LoginForm", () => {
 
   it("carries the return path through as a hidden field", () => {
     const { container } = render(
-      <LoginForm demo={DEMO} next="/dashboard/inbox" />,
+      <LoginForm accounts={ACCOUNTS} next="/dashboard/inbox" />,
     );
 
     expect(container.querySelector('input[name="next"]')).toHaveValue(
@@ -88,21 +103,38 @@ describe("LoginForm", () => {
     );
   });
 
-  it("shows the demo credentials and can fill them in", async () => {
-    render(<LoginForm demo={DEMO} />);
+  it("lists every seeded account with its credentials", () => {
+    render(<LoginForm accounts={ACCOUNTS} />);
 
-    expect(screen.getByText(DEMO.email)).toBeInTheDocument();
-    expect(screen.getByText(DEMO.password)).toBeInTheDocument();
+    for (const account of ACCOUNTS) {
+      expect(screen.getByText(account.email)).toBeInTheDocument();
+      expect(screen.getByText(account.password)).toBeInTheDocument();
+      expect(screen.getByText(account.label)).toBeInTheDocument();
+    }
+  });
 
-    await userEvent.click(screen.getByRole("button", { name: /fill these in/i }));
+  it("fills in whichever account is chosen", async () => {
+    render(<LoginForm accounts={ACCOUNTS} />);
 
-    expect(screen.getByLabelText(/email address/i)).toHaveValue(DEMO.email);
-    expect(screen.getByLabelText(/^Password/, { selector: "input" })).toHaveValue(DEMO.password);
+    const fillButtons = screen.getAllByRole("button", { name: /use this/i });
+
+    expect(fillButtons).toHaveLength(ACCOUNTS.length);
+
+    // The second row, to prove the chosen account is used and not the first.
+    await userEvent.click(fillButtons[1]);
+
+    expect(screen.getByLabelText(/email address/i)).toHaveValue(
+      ACCOUNTS[1].email,
+    );
+
+    expect(
+      screen.getByLabelText(/^Password/, { selector: "input" }),
+    ).toHaveValue(ACCOUNTS[1].password);
   });
 
   it("does not offer a password reset it cannot deliver", () => {
     // There is no mail backend, so this must not look like a working link.
-    render(<LoginForm demo={DEMO} />);
+    render(<LoginForm accounts={ACCOUNTS} />);
 
     const reset = screen.getByText(/forgot password/i);
 

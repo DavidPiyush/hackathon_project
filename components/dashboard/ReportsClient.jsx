@@ -59,7 +59,7 @@ export function ReportsClient() {
         return true;
       }
 
-      return [report.id, report.title, report.caseId ?? "", report.author]
+      return [report.id, report.title, report.case_id ?? "", report.author]
         .some((field) => String(field).toLowerCase().includes(needle));
     });
   }, [reports, filter, query]);
@@ -73,7 +73,7 @@ export function ReportsClient() {
    * legible rather than suspicious.
    */
   const generate = async () => {
-    const target = investigations.find((item) => item.id === draft.caseId);
+    const target = investigations.find((item) => item.case_id === draft.caseId);
 
     setStep(0);
 
@@ -86,9 +86,9 @@ export function ReportsClient() {
 
     actions.createReport({
       title: target
-        ? `${target.id} — ${target.title}`
+        ? `${target.case_id} — ${target.title}`
         : `Ad-hoc threat summary — ${new Date().toISOString().slice(0, 10)}`,
-      caseId: target?.id ?? null,
+      caseId: target?.case_id ?? null,
       format: draft.format,
       risk: target?.risk ?? 0,
       pages: target ? 9 + Math.round(target.risk / 12) : 18,
@@ -224,9 +224,9 @@ export function ReportsClient() {
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-faint">
                         <span className="ioc">{report.id}</span>
 
-                        {report.caseId && (
+                        {report.case_id && (
                           <span className="ioc text-accent">
-                            {report.caseId}
+                            {report.case_id}
                           </span>
                         )}
 

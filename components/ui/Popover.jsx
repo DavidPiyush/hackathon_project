@@ -66,9 +66,27 @@ export function Popover({ trigger, children, align = "right", className }) {
             className,
           )}
         >
-          {/* Any activation inside the panel dismisses it, which is the
-              expected behaviour for menu items and links. */}
-          <div onClick={() => setOpen(false)}>{children}</div>
+          {/*
+            Activating a menu item dismisses the panel, which is what a menu
+            should do — but not when the click is inside a form.
+
+            Closing unmounts this subtree. A submit button whose form is
+            unmounted in the same tick never dispatches, which is exactly how
+            the sign-out form silently did nothing: the session was never
+            cleared and the user stayed signed in. Forms are left to their own
+            navigation, which closes the panel anyway.
+          */}
+          <div
+            onClick={(event) => {
+              if (event.target.closest("form")) {
+                return;
+              }
+
+              setOpen(false);
+            }}
+          >
+            {children}
+          </div>
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ENDPOINTS, SCHEMAS } from "@/lib/api/schema";
 import { Icon } from "@/components/ui/Icon";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -10,297 +11,369 @@ import { CtaBand } from "@/components/marketing/CtaBand";
 export const metadata = {
   title: "API Reference",
   description:
-    "Submit messages for analysis and retrieve investigation results programmatically.",
+    "The ThreatDetect HTTP API: Google OAuth, Gmail ingestion, forensic analysis, investigations and reports.",
   alternates: { canonical: "/docs/api" },
 };
 
-const ENDPOINTS = [
+const METHOD_TONES = {
+  GET: "info",
+  POST: "safe",
+  PATCH: "warn",
+  DELETE: "critical",
+};
+
+/**
+ * Endpoint groups, described for a reader.
+ *
+ * Paths and methods come from `lib/api/schema.js`, which is transcribed from
+ * the OpenAPI document — so this page cannot describe a route the client does
+ * not also know about.
+ */
+const GROUPS = [
   {
-    method: "POST",
-    path: "/v1/messages",
-    tone: "safe",
-    summary: "Submit a message for analysis",
-    detail:
-      "Accepts raw RFC 5322 content. Returns an evidence record id immediately; analysis completes asynchronously.",
+    title: "Authentication",
+    icon: "key",
+    intro:
+      "Google OAuth. There is no password endpoint: sign-in is a full-page redirect to Google and back, and the session is a cookie the browser sends automatically.",
+    rows: [
+      [ENDPOINTS.auth.googleLogin, "Begin sign-in. Redirects to Google's consent screen."],
+      [ENDPOINTS.auth.googleCallback, "OAuth return path. Exchanges the code for tokens and sets the session cookie."],
+      [ENDPOINTS.auth.status, "Whether the caller is signed in, and who they are."],
+      [ENDPOINTS.auth.logout, "Clear the session."],
+    ],
   },
   {
-    method: "GET",
-    path: "/v1/messages/{id}",
-    tone: "info",
-    summary: "Retrieve an analysis",
-    detail:
-      "Returns the score, contributing signals, authentication results, routing path, indicators and findings.",
+    title: "Gmail",
+    icon: "envelope",
+    intro:
+      "Reads the signed-in user's mailbox using the scopes granted during OAuth. Listing is paginated with an opaque page token.",
+    rows: [
+      [ENDPOINTS.gmail.profile, "The connected mailbox's address and message counts."],
+      [ENDPOINTS.gmail.messages, "List messages. max_results defaults to 20; query accepts Gmail search syntax."],
+      [ENDPOINTS.gmail.message, "One message, including headers and body."],
+    ],
   },
   {
-    method: "GET",
-    path: "/v1/indicators",
-    tone: "info",
-    summary: "Query the indicator registry",
-    detail:
-      "Filter by type, verdict, first-seen date or linked case. Paginated.",
+    title: "Analysis",
+    icon: "search",
+    intro:
+      "The forensic pipeline: header reconstruction, authentication results, indicator extraction and scoring.",
+    rows: [
+      [ENDPOINTS.analysis.email, "Analyse raw RFC 5322 content supplied directly."],
+      [ENDPOINTS.analysis.gmailMessage, "Fetch a Gmail message by id and run the full pipeline on it."],
+      [ENDPOINTS.analysis.status, "Which analysis capabilities are available."],
+    ],
   },
   {
-    method: "POST",
-    path: "/v1/cases",
-    tone: "safe",
-    summary: "Open an investigation",
-    detail: "Creates a case and links one or more evidence records to it.",
+    title: "Investigations",
+    icon: "folder",
+    intro:
+      "Cases are addressed by case_id. Updates are PATCH, so a request changes only the fields it sends.",
+    rows: [
+      [ENDPOINTS.investigations.list, "Every case. No filter or pagination parameters."],
+      [ENDPOINTS.investigations.create, "Open a case."],
+      [ENDPOINTS.investigations.get, "One case with its emails, findings, IOCs and risk."],
+      [ENDPOINTS.investigations.update, "Change title, description, priority, status, analyst or notes."],
+      [ENDPOINTS.investigations.remove, "Delete a case."],
+      [ENDPOINTS.investigations.analyzeGmail, "Analyse a Gmail message and attach the result to a case."],
+    ],
   },
   {
-    method: "GET",
-    path: "/v1/cases/{id}/report",
-    tone: "info",
-    summary: "Generate a report",
-    detail:
-      "Returns the report as PDF, JSON, STIX 2.1 or CSV via the Accept header.",
+    title: "Reports",
+    icon: "file",
+    intro: "Structured forensic output for a case, as JSON or a rendered PDF.",
+    rows: [
+      [ENDPOINTS.reports.get, "The report as structured data."],
+      [ENDPOINTS.reports.pdf, "The same report rendered to PDF."],
+    ],
+  },
+  {
+    title: "Health",
+    icon: "gauge",
+    intro:
+      "Readiness probes. The threat-intel probe reports which providers are configured and never exposes an API key.",
+    rows: [
+      [ENDPOINTS.health.basic, "The application is running."],
+      [ENDPOINTS.health.database, "PostgreSQL connectivity."],
+      [ENDPOINTS.health.threatIntel, "Configured threat-intelligence providers."],
+      [ENDPOINTS.health.services, "Internal service capability information."],
+      [ENDPOINTS.health.full, "Application, database and services combined."],
+    ],
   },
 ];
+
+/** Render a request schema's fields as a readable table. */
+function SchemaTable({ name }) {
+  const schema = SCHEMAS[name];
+
+  return (
+    <Card padded={false} className="mt-4 overflow-hidden">
+      <div className="border-b border-line px-4 py-3">
+        <code className="ioc font-semibold text-ink">{name}</code>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[34rem] text-left">
+          <caption className="sr-only">
+            Fields accepted by {name}, with their constraints
+          </caption>
+
+          <thead className="border-b border-line bg-raise">
+            <tr>
+              {["Field", "Type", "Constraints"].map((heading) => (
+                <th
+                  key={heading}
+                  scope="col"
+                  className="px-4 py-2.5 text-[10px] font-medium uppercase tracking-wider text-ink-faint"
+                >
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-line">
+            {Object.entries(schema.fields).map(([field, rule]) => {
+              const constraints = [
+                schema.required.includes(field) ? "required" : "optional",
+                rule.minLength !== undefined ? `min ${rule.minLength}` : null,
+                rule.maxLength !== undefined ? `max ${rule.maxLength}` : null,
+                rule.default !== undefined ? `default "${rule.default}"` : null,
+                rule.nullable ? "nullable" : null,
+              ].filter(Boolean);
+
+              return (
+                <tr key={field}>
+                  <th scope="row" className="px-4 py-2.5 text-left font-normal">
+                    <code className="ioc font-medium text-ink">{field}</code>
+                  </th>
+
+                  <td className="px-4 py-2.5">
+                    <Badge tone="neutral" size="xs">
+                      {rule.type}
+                    </Badge>
+                  </td>
+
+                  <td className="px-4 py-2.5 text-[11px] text-ink-muted">
+                    {constraints.join(" · ")}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
 
 export default function ApiDocsPage() {
   return (
     <PageShell
       eyebrow="API Reference"
       eyebrowIcon="code"
-      title="Programmatic access"
+      title="ThreatDetect HTTP API"
       description="Everything the console does is available over HTTP, so analysis can run inside an existing SOAR pipeline rather than only in a browser."
       breadcrumb={[
         { name: "Documentation", href: "/docs" },
         { name: "API Reference" },
       ]}
       meta={[
-        { label: "Version", value: "v1" },
-        { label: "Base URL", value: "api.threatdetect.com" },
-        { label: "Auth", value: "Bearer token" },
+        { label: "Version", value: "1.0.0" },
+        { label: "Spec", value: "OpenAPI 3.1" },
+        { label: "Auth", value: "Google OAuth" },
       ]}
     >
       <Section size="md">
-        {/* Status notice — this API is specified, not deployed. */}
-        <Card tone="warn" className="p-5">
+        <Card tone="info" className="p-5">
           <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-warn/10 text-warn">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-info/10 text-info">
               <Icon name="info" />
             </span>
 
             <div>
               <p className="text-sm font-semibold text-ink">
-                This is a specification, not a live endpoint
+                Point the frontend at your backend
               </p>
 
               <p className="mt-2 max-w-3xl text-xs leading-6 text-ink-soft">
-                The current build is a front end with no deployed backend. These
-                routes document the intended contract so the interface and the
-                API stay in step — calling them today will not succeed. The{" "}
+                Set{" "}
+                <code className="rounded border border-line bg-raise-md px-1.5 py-0.5 font-mono text-[11px] text-ink">
+                  NEXT_PUBLIC_API_URL
+                </code>{" "}
+                to the FastAPI origin. Until it is set, Google sign-in is
+                disabled and the console runs against its local demo store. The{" "}
                 <Link
                   href="/dashboard/analysis"
                   className="font-medium text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
                 >
-                  in-browser analyzer
+                  header analyzer
                 </Link>{" "}
-                does work, and needs no API at all.
+                works either way, because it parses in the browser and needs no
+                API at all.
               </p>
             </div>
           </div>
         </Card>
 
-        <div className="mt-10 grid gap-12 lg:grid-cols-[1fr_20rem] lg:gap-16">
-          <Prose>
-            <h2 id="authentication">Authentication</h2>
+        <Prose className="mt-10 max-w-none">
+          <h2 id="authentication">Authentication</h2>
 
-            <p>
-              Every request carries a bearer token. Tokens are workspace-scoped
-              and carry the same role permissions as the console, so an
-              integration can never read more than its analyst could.
-            </p>
+          <p>
+            The API authenticates with <strong>Google OAuth</strong> and a
+            session cookie — there is no password endpoint. Sign-in is a
+            top-level navigation, not a <code>fetch</code>: the flow redirects
+            to Google and back to the callback, which a same-origin request
+            cannot follow.
+          </p>
 
-            <pre>
-              <code>{`curl https://api.threatdetect.com/v1/messages/EM-2041 \\
-  -H "Authorization: Bearer $THREATDETECT_TOKEN" \\
-  -H "Accept: application/json"`}</code>
-            </pre>
+          <pre>
+            <code>{`// Start sign-in — a real navigation, not a fetch
+window.location.href = \`\${API_URL}/auth/google\`;
 
-            <h2 id="endpoints">Endpoints</h2>
+// Later, check who is signed in
+const status = await fetch(\`\${API_URL}/auth/status\`, {
+  credentials: "include",   // the session is a cookie
+}).then((response) => response.json());`}</code>
+          </pre>
 
-            <div className="mt-5 space-y-3">
-              {ENDPOINTS.map((endpoint) => (
-                <Card key={endpoint.path} className="p-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Badge tone={endpoint.tone} size="sm" uppercase>
-                      {endpoint.method}
-                    </Badge>
+          <p>
+            Because the session is a cookie, every request must send{" "}
+            <code>credentials: &quot;include&quot;</code> — which also means the
+            backend&rsquo;s CORS policy has to name the frontend origin
+            explicitly. A wildcard is not permitted with credentialed requests.
+          </p>
 
-                    <code className="ioc font-semibold text-ink">
-                      {endpoint.path}
-                    </code>
-                  </div>
+          <h2 id="endpoints">Endpoints</h2>
+        </Prose>
 
-                  <p className="mt-2.5 text-xs font-medium text-ink-soft">
-                    {endpoint.summary}
-                  </p>
-
-                  <p className="mt-1.5 text-[11px] leading-5 text-ink-muted">
-                    {endpoint.detail}
-                  </p>
-                </Card>
-              ))}
-            </div>
-
-            <h2 id="submitting">Submitting a message</h2>
-
-            <p>
-              Post the raw message. The response returns immediately with an
-              evidence id; poll the retrieval endpoint, or supply a{" "}
-              <code>callback_url</code> to be notified when analysis completes.
-            </p>
-
-            <pre>
-              <code>{`POST /v1/messages
-Content-Type: message/rfc822
-
-Received: from mail.example.com ...
-From: "Finance" <finance@example.com>
-Subject: Urgent Invoice Payment Required
-
---- response ---
-201 Created
-{
-  "id": "EM-2041",
-  "state": "analyzing",
-  "submitted_at": "2026-09-07T10:42:03Z"
-}`}</code>
-            </pre>
-
-            <h2 id="result">Reading a result</h2>
-
-            <p>
-              The result mirrors what the console shows, including the evidence
-              classification on every finding. Note that{" "}
-              <code>unknown</code> is a first-class value — clients must handle
-              it rather than treating a missing verdict as benign.
-            </p>
-
-            <pre>
-              <code>{`{
-  "id": "EM-2041",
-  "score": 92,
-  "severity": "critical",
-  "authentication": {
-    "spf":       { "result": "softfail" },
-    "dkim":      { "result": "none" },
-    "dmarc":     { "result": "fail" },
-    "alignment": { "result": "fail" }
-  },
-  "signals": [
-    { "name": "Banking-detail change request", "weight": 0.28 },
-    { "name": "Sender domain age under 30 days", "weight": 0.21 }
-  ],
-  "findings": [
-    { "evidence": "observed", "text": "Header From domain differs from envelope sender." },
-    { "evidence": "inferred", "text": "Consistent with invoice-fraud BEC.", "confidence": "high" },
-    { "evidence": "unknown",  "text": "Whether a supplier mailbox was compromised." }
-  ],
-  "indicators": [
-    { "type": "domain", "value": "secure-payments.com", "verdict": "malicious" }
-  ]
-}`}</code>
-            </pre>
-
-            <h2 id="errors">Errors</h2>
-
-            <p>
-              Errors use standard status codes with a machine-readable{" "}
-              <code>code</code> and a human-readable <code>message</code>.
-              Rate limits return <code>429</code> with a{" "}
-              <code>Retry-After</code> header.
-            </p>
-
-            <ul>
-              <li>
-                <code>400</code> — the submitted content could not be parsed as
-                an email message
-              </li>
-              <li>
-                <code>401</code> — missing or expired bearer token
-              </li>
-              <li>
-                <code>403</code> — the token&rsquo;s role cannot access this
-                workspace or case
-              </li>
-              <li>
-                <code>404</code> — no evidence record or case with that id
-              </li>
-              <li>
-                <code>409</code> — the case is finalised and cannot be modified
-              </li>
-              <li>
-                <code>429</code> — rate limited; honour{" "}
-                <code>Retry-After</code>
-              </li>
-            </ul>
-          </Prose>
-
-          {/* ---- Sidebar ---- */}
-          <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
-            <Card className="p-5">
+        <div className="mt-6 space-y-6">
+          {GROUPS.map((group) => (
+            <Card key={group.title} className="p-6">
               <CardHeader
-                icon="bolt"
-                title="Rate limits"
-                subtitle="Per workspace token"
-                level={2}
+                icon={group.icon}
+                title={group.title}
+                subtitle={group.intro}
+                level={3}
               />
 
-              <dl className="mt-5 space-y-2.5">
-                {[
-                  { label: "Message submission", value: "60 / min" },
-                  { label: "Result retrieval", value: "600 / min" },
-                  { label: "Registry queries", value: "300 / min" },
-                  { label: "Report generation", value: "10 / min" },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-line bg-raise px-3 py-2"
-                  >
-                    <dt className="text-[11px] text-ink-faint">
-                      {item.label}
-                    </dt>
-                    <dd className="ioc font-semibold text-ink-soft">
-                      {item.value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </Card>
-
-            <Card tone="critical" className="p-5">
-              <CardHeader
-                icon="lock"
-                iconTone="critical"
-                title="Handling evidence"
-                subtitle="Non-negotiable"
-                level={2}
-              />
-
-              <ul className="mt-5 space-y-2.5">
-                {[
-                  "Never log full message bodies in your integration",
-                  "Store evidence ids, not copies of the message",
-                  "Treat every extracted URL as live and hostile",
-                  "Scope tokens to the narrowest role that works",
-                ].map((rule) => (
+              <ul className="mt-6 space-y-3">
+                {group.rows.map(([endpoint, note]) => (
                   <li
-                    key={rule}
-                    className="flex items-start gap-2.5 text-[11px] leading-5 text-ink-muted"
+                    key={`${endpoint.method} ${endpoint.path}`}
+                    className="rounded-lg border border-line bg-raise p-3"
                   >
-                    <Icon
-                      name="check"
-                      className="mt-0.5 shrink-0 text-[10px] text-critical"
-                    />
-                    {rule}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Badge
+                        tone={METHOD_TONES[endpoint.method] ?? "neutral"}
+                        size="sm"
+                        uppercase
+                      >
+                        {endpoint.method}
+                      </Badge>
+
+                      <code className="ioc font-semibold text-ink">
+                        {endpoint.path}
+                      </code>
+
+                      {endpoint.query && (
+                        <span className="text-[10px] text-ink-faint">
+                          query: {endpoint.query.join(", ")}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="mt-2 text-[11px] leading-5 text-ink-muted">
+                      {note}
+                    </p>
                   </li>
                 ))}
               </ul>
             </Card>
-          </aside>
+          ))}
         </div>
+
+        <Prose className="mt-12 max-w-none">
+          <h2 id="schemas">Request bodies</h2>
+
+          <p>
+            These constraints are enforced client-side too, so an over-long
+            title is rejected before it becomes a 422 the user has to decode.
+          </p>
+        </Prose>
+
+        <SchemaTable name="EmailAnalysisRequest" />
+        <SchemaTable name="InvestigationCreate" />
+        <SchemaTable name="InvestigationUpdate" />
+
+        <Prose className="mt-12 max-w-none">
+          <h2 id="analysis-example">Analysing a message</h2>
+
+          <pre>
+            <code>{`POST /analysis/email
+Content-Type: application/json
+
+{
+  "raw_email": "Received: from mail.example.com ...\\nFrom: \\"Finance\\" <finance@example.com>\\nSubject: Urgent Invoice Payment Required",
+  "case_id": "IR-2026-018"
+}`}</code>
+          </pre>
+
+          <p>
+            <code>case_id</code> is optional. Supplying it associates the
+            analysis with an existing case; omitting it produces a standalone
+            result.
+          </p>
+
+          <h2 id="errors">Errors</h2>
+
+          <p>
+            Validation failures return <code>422</code> with FastAPI&rsquo;s
+            standard body. The client maps it onto per-field errors, so the same
+            rendering handles a local rejection and a server one.
+          </p>
+
+          <pre>
+            <code>{`422 Unprocessable Entity
+
+{
+  "detail": [
+    {
+      "loc": ["body", "title"],
+      "msg": "String should have at least 1 character",
+      "type": "string_too_short"
+    }
+  ]
+}`}</code>
+          </pre>
+
+          <ul>
+            <li>
+              <code>401</code> / <code>403</code> — no valid session. Send the
+              user back through <code>/auth/google</code>.
+            </li>
+            <li>
+              <code>404</code> — no case or message with that id.
+            </li>
+            <li>
+              <code>422</code> — the body failed validation; read{" "}
+              <code>detail</code>.
+            </li>
+          </ul>
+
+          <h2 id="field-names">A note on field names</h2>
+
+          <p>
+            This console&rsquo;s own data model uses the API&rsquo;s field names
+            — <code>case_id</code>, <code>description</code>,{" "}
+            <code>status</code>, <code>notes</code> — rather than the names an
+            isolated frontend would have invented. That is deliberate: swapping
+            the local demo store for live HTTP calls should not require renaming
+            anything in the UI, and{" "}
+            <code>__tests__/api-contract.test.js</code> fails if the two drift
+            apart.
+          </p>
+        </Prose>
       </Section>
 
       <CtaBand
